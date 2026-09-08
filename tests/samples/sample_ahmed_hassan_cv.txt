@@ -1,0 +1,32 @@
+Ahmed Hassan
+Email: ahmed.hassan@example.com | Phone: +20 100 123 4567 | Location: Mansoura, Egypt
+LinkedIn: linkedin.com/in/ahmed-hassan | GitHub: github.com/ahmed-hassan
+
+PROFESSIONAL SUMMARY
+Aspiring Data Scientist and Computer Science undergraduate with hands-on experience in Machine Learning, Statistical Analysis, and Python data pipelines. Passionate about solving real-world business problems through data-driven models.
+
+EDUCATION
+Bachelor of Science in Computer Science (BSc Computer Science)
+Faculty of Computers and Information, Mansoura University
+2022 – 2026 (Expected Graduation: June 2026) | Current GPA: 3.8 / 4.0
+
+TECHNICAL SKILLS
+• Programming Languages: Python, SQL (PostgreSQL, MySQL), C++
+• Libraries & Frameworks: Pandas, NumPy, Scikit-learn, TensorFlow
+• Data & Machine Learning: Machine Learning, Statistical Analysis, Deep Learning
+• Tools & Platforms: Git, GitHub, Docker, Linux, Microsoft Excel
+
+PROJECTS
+Customer Churn Prediction Model
+• Developed an end-to-end customer churn prediction pipeline using Python and Scikit-learn on a telecom dataset of 7,000+ records.
+• Applied data preprocessing with Pandas and NumPy, achieving an 86% F1-score with Random Forest.
+• Containerized the deployment workflow using Docker and managed version control with Git.
+
+Automated SQL Financial Reporting Pipeline
+• Built an automated ETL pipeline extracting transactional data using PostgreSQL and SQL queries.
+• Optimized query performance and generated automated summary analytics.
+
+WORK & INTERNSHIP EXPERIENCE
+Data Science Intern | Mansoura Tech Solutions (July 2024 – September 2024)
+• Collaborated with senior engineers to analyze datasets and build machine learning prototypes in Python.
+• Wrote SQL queries to extract data and clean client transaction records.
