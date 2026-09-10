@@ -1,6 +1,5 @@
-import sys
-import json
 import argparse
+import sys
 from pathlib import Path
 
 # Ensure UTF-8 output on Windows terminal
@@ -27,7 +26,7 @@ def main():
     else:
         file_path = args.file
 
-    print(f"[START] Initializing SkillMatch CV Extraction Pipeline...")
+    print("[START] Initializing SkillMatch CV Extraction Pipeline...")
     pipeline = CVExtractionPipeline()
 
     print(f"[EXTRACT] Processing document: {file_path}")

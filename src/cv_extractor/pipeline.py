@@ -1,26 +1,24 @@
-import os
-import uuid
 import logging
+import uuid
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Set
 
 from ..models.candidate import (
     Candidate,
-    CandidateProfileDetails,
     CandidatePreferences,
+    CandidateProfileDetails,
     CandidateSkill,
+    CertificationItem,
     EducationItem,
     ExperienceItem,
     ProjectItem,
-    CertificationItem,
 )
 from ..taxonomy.taxonomy_manager import TaxonomyManager
 from ..utils.text_cleaner import TextCleaner
-from .document_loader import DocumentLoader
-from .llm_extractor import LLMExtractor
-from .evidence_linker import EvidenceLinker
 from .confidence_scorer import ConfidenceScorer
+from .document_loader import DocumentLoader
+from .evidence_linker import EvidenceLinker
 from .link_associator import ProjectLinkAssociator
+from .llm_extractor import LLMExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +40,16 @@ class CVExtractionPipeline:
 
     def __init__(
         self,
-        taxonomy_manager: Optional[TaxonomyManager] = None,
-        document_loader: Optional[DocumentLoader] = None,
-        llm_extractor: Optional[LLMExtractor] = None,
+        taxonomy_manager: TaxonomyManager | None = None,
+        document_loader: DocumentLoader | None = None,
+        llm_extractor: LLMExtractor | None = None,
+        extractor: LLMExtractor | None = None,
     ):
         self.taxonomy = taxonomy_manager or TaxonomyManager()
         self.loader = document_loader or DocumentLoader()
-        self.extractor = llm_extractor or LLMExtractor()
+        self.extractor = extractor or llm_extractor or LLMExtractor()
 
-    def extract_from_file(self, file_path: str, candidate_id: Optional[str] = None) -> Candidate:
+    def extract_from_file(self, file_path: str, candidate_id: str | None = None) -> Candidate:
         """
         Executes full extraction pipeline on a CV file path.
         """
@@ -67,14 +66,14 @@ class CVExtractionPipeline:
     def extract_from_text(
         self,
         raw_text: str,
-        file_name: Optional[str] = None,
-        candidate_id: Optional[str] = None
+        file_name: str | None = None,
+        candidate_id: str | None = None
     ) -> Candidate:
         """
         Executes strict 9-step pipeline on raw text.
         """
         cid = candidate_id or f"cand_{uuid.uuid4().hex[:8]}"
-        
+
         # Step 1 & 2: Clean text and segment sections
         cleaned_text = TextCleaner.clean_text(raw_text)
         sections = TextCleaner.segment_sections(cleaned_text)
@@ -91,27 +90,40 @@ class CVExtractionPipeline:
                 document_urls=document_urls
             )
 
-        # Step 4: Collect candidate skill mentions
-        skill_candidates: Set[str] = set()
+        # Step 4: Collect candidate skill mentions and raw proficiency levels
+        skill_candidates: set[str] = set()
+        raw_skill_levels: dict[str, str] = {}
 
         # A) Explicit skills from extractor
-        for s in entities.get("raw_skills", []):
-            if isinstance(s, dict) and s.get("name"):
-                skill_candidates.add(s["name"])
+        for s in (entities.get("raw_skills") or []):
+            skill_name = None
+            skill_level = None
+            if hasattr(s, "name"):
+                skill_name = s.name
+                skill_level = getattr(s, "level", None)
+            elif isinstance(s, dict):
+                skill_name = s.get("name")
+                skill_level = s.get("level") or s.get("proficiency") or s.get("proficiency_level") or s.get("raw_level")
             elif isinstance(s, str) and s.strip():
-                skill_candidates.add(s.strip())
+                skill_name = s.strip()
+
+            if skill_name and isinstance(skill_name, str) and skill_name.strip():
+                clean_name = skill_name.strip()
+                skill_candidates.add(clean_name)
+                if skill_level and isinstance(skill_level, str) and skill_level.strip():
+                    raw_skill_levels[clean_name.lower()] = skill_level.strip()
 
         # B) Technologies mentioned in experiences
-        for exp in entities.get("experience", []):
+        for exp in (entities.get("experience") or []):
             if isinstance(exp, dict):
-                for tech in exp.get("technologies", []):
+                for tech in (exp.get("technologies") or []):
                     if isinstance(tech, str) and tech.strip():
                         skill_candidates.add(tech.strip())
 
         # C) Technologies mentioned in projects
-        for proj in entities.get("projects", []):
+        for proj in (entities.get("projects") or []):
             if isinstance(proj, dict):
-                for tech in proj.get("technologies", []):
+                for tech in (proj.get("technologies") or []):
                     if isinstance(tech, str) and tech.strip():
                         skill_candidates.add(tech.strip())
 
@@ -124,16 +136,17 @@ class CVExtractionPipeline:
                     skill_candidates.add(item.canonical_name)
 
         # Step 5, 6, 7, 8: Match against taxonomy (with open-world dynamic fallback), Reject garbage, Link evidence, Deduplicate & Score
-        final_skills: List[CandidateSkill] = []
-        processed_skill_ids: Set[str] = set()
+        final_skills: list[CandidateSkill] = []
+        processed_skill_ids: set[str] = set()
 
         for raw_mention in skill_candidates:
             if not raw_mention or len(raw_mention.strip()) < 2:
                 continue
 
-            # Hybrid Open-World Taxonomy: Match known or dynamically normalize novel technologies, reject stopwords
-            skill_id, canonical_name, category = self.taxonomy.normalize_skill(raw_mention, strict=False)
+            # Strict Taxonomy Matching: Match canonical skills and validated aliases, reject noise
+            skill_id, canonical_name, category = self.taxonomy.normalize_skill(raw_mention, strict=True)
             if not skill_id or not canonical_name:
+                logger.debug("Skill mention '%s' dropped: not found in canonical taxonomy (strict=True).", raw_mention)
                 continue
 
             # Deduplication
@@ -157,8 +170,16 @@ class CVExtractionPipeline:
             processed_skill_ids.add(skill_id)
 
             # Context-Aware Confidence & Proficiency Level Calculation
+            raw_level = (
+                raw_skill_levels.get(raw_mention.lower().strip())
+                or raw_skill_levels.get(TaxonomyManager._clean_string(raw_mention))
+                or raw_skill_levels.get(canonical_name.lower().strip())
+                or raw_skill_levels.get(TaxonomyManager._clean_string(canonical_name))
+                or raw_skill_levels.get(skill_id)
+                or ""
+            )
             confidence = ConfidenceScorer.calculate_confidence(evidence_items)
-            level = ConfidenceScorer.infer_level(evidence_items)
+            level = ConfidenceScorer.infer_level(evidence_items, raw_level=raw_level)
 
             final_skills.append(
                 CandidateSkill(
@@ -174,20 +195,18 @@ class CVExtractionPipeline:
         final_skills.sort(key=lambda s: s.confidence, reverse=True)
 
         # Step 9: Assemble Validated Candidate Object
-        education_items = [EducationItem(**item) for item in entities.get("education", [])]
-        experience_items = [ExperienceItem(**item) for item in entities.get("experience", [])]
-        project_items = [ProjectItem(**item) for item in entities.get("projects", [])]
-        cert_items = [CertificationItem(**item) for item in entities.get("certifications", [])]
+        education_items = [EducationItem(**item) if isinstance(item, dict) else item for item in (entities.get("education") or [])]
+        experience_items = [ExperienceItem(**item) if isinstance(item, dict) else item for item in (entities.get("experience") or [])]
+        project_items = [ProjectItem(**item) if isinstance(item, dict) else item for item in (entities.get("projects") or [])]
+        cert_items = [CertificationItem(**item) if isinstance(item, dict) else item for item in (entities.get("certifications") or [])]
 
-        target_roles = entities.get("target_roles", [])
-        if not target_roles:
-            target_roles = ["Agentic AI Developer"] if "Agentic" in cleaned_text or "AI" in cleaned_text else ["Software Engineer"]
+        target_roles = entities.get("target_roles") or []
 
         profile_details = CandidateProfileDetails(
-            name=entities.get("name", "Candidate"),
+            name=entities.get("name") or "Candidate",
             email=entities.get("email"),
             phone=entities.get("phone"),
-            location=entities.get("location", "Egypt"),
+            location=entities.get("location"),
             education=education_items,
             target_roles=target_roles,
             preferences=CandidatePreferences()

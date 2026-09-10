@@ -1,14 +1,12 @@
-import re
-from typing import List
 from ..models.candidate import EvidenceItem
-from ..models.common import SkillLevel, ConfidenceTier, get_confidence_tier
+from ..models.common import SkillLevel
 
 
 class ConfidenceScorer:
     """
     Computes explainable extraction confidence scores and infers proficiency levels
     based on evidence depth, context complexity, and practical application.
-    
+
     Standards:
       0.90 - 1.00 : Very High (Applied in production jobs + multiple projects + deep impact)
       0.75 - 0.89 : High (Demonstrated in practical project implementation)
@@ -22,8 +20,35 @@ class ConfidenceScorer:
         "microservices", "end-to-end", "ci/cd", "deployment", "evaluation", "metric"
     }
 
+    LEVEL_SYNONYMS = {
+        "expert": SkillLevel.EXPERT,
+        "master": SkillLevel.EXPERT,
+        "principal": SkillLevel.EXPERT,
+        "lead": SkillLevel.EXPERT,
+        "staff": SkillLevel.EXPERT,
+        "advanced": SkillLevel.ADVANCED,
+        "senior": SkillLevel.ADVANCED,
+        "proficient": SkillLevel.ADVANCED,
+        "fluent": SkillLevel.ADVANCED,
+        "high": SkillLevel.ADVANCED,
+        "intermediate": SkillLevel.INTERMEDIATE,
+        "mid": SkillLevel.INTERMEDIATE,
+        "mid-level": SkillLevel.INTERMEDIATE,
+        "moderate": SkillLevel.INTERMEDIATE,
+        "medium": SkillLevel.INTERMEDIATE,
+        "good": SkillLevel.INTERMEDIATE,
+        "beginner": SkillLevel.BEGINNER,
+        "junior": SkillLevel.BEGINNER,
+        "basic": SkillLevel.BEGINNER,
+        "entry": SkillLevel.BEGINNER,
+        "entry-level": SkillLevel.BEGINNER,
+        "novice": SkillLevel.BEGINNER,
+        "foundational": SkillLevel.BEGINNER,
+        "familiar": SkillLevel.BEGINNER,
+    }
+
     @classmethod
-    def calculate_confidence(cls, evidence_items: List[EvidenceItem]) -> float:
+    def calculate_confidence(cls, evidence_items: list[EvidenceItem]) -> float:
         """
         Calculates a contextual, evidence-backed confidence score (0.0 to 1.0).
         """
@@ -77,20 +102,24 @@ class ConfidenceScorer:
         return min(0.99, max(0.40, round(score, 2)))
 
     @classmethod
-    def infer_level(cls, evidence_items: List[EvidenceItem], raw_level: str = "") -> SkillLevel:
+    def infer_level(cls, evidence_items: list[EvidenceItem], raw_level: str = "") -> SkillLevel:
         """
         Infers proficiency level (beginner, intermediate, advanced, expert, unknown) from evidence.
+        If a valid raw_level was provided (e.g. by LLM extractor / candidate self-report), it takes precedence.
         """
         raw_clean = (raw_level or "").lower().strip()
-        if raw_clean in [l.value for l in SkillLevel]:
-            return SkillLevel(raw_clean)
+        if raw_clean and raw_clean != "unknown":
+            if raw_clean in [lvl.value for lvl in SkillLevel]:
+                return SkillLevel(raw_clean)
+            if raw_clean in cls.LEVEL_SYNONYMS:
+                return cls.LEVEL_SYNONYMS[raw_clean]
 
         if not evidence_items:
             return SkillLevel.UNKNOWN
 
         has_experience = any("experience" in (e.section or "") or e.type == "experience" for e in evidence_items)
         project_count = sum(1 for e in evidence_items if "project" in (e.section or "") or e.type == "project")
-        
+
         # Check for advanced complexity keywords in evidence
         has_advanced_context = any(
             any(kw in (e.text or "").lower() for kw in ["architected", "fine-tuned", "lead", "production", "streaming", "scalable"])

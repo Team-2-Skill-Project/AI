@@ -1,10 +1,26 @@
 import os
 from functools import lru_cache
-from typing import Optional
+from pathlib import Path
+
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 load_dotenv()
+
+
+def resolve_taxonomy_path(raw_path: str | None = None) -> str:
+    """Resolves relative taxonomy file paths against repository root to ensure working directory independence."""
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    if not raw_path:
+        return str(base_dir / "docs" / "ai-contract" / "skills_seed.json")
+    path_obj = Path(raw_path)
+    if path_obj.is_absolute():
+        return str(path_obj)
+    if path_obj.exists():
+        return str(path_obj.resolve())
+    resolved = base_dir / path_obj
+    return str(resolved)
+
 
 
 class LLMSettings(BaseModel):
@@ -17,7 +33,7 @@ class LLMSettings(BaseModel):
         default="gemini",
         description="LLM provider name (e.g. gemini, openai, groq, mistral, ollama, custom)"
     )
-    api_key: Optional[str] = Field(
+    api_key: str | None = Field(
         default=None,
         description="API key for the LLM service"
     )
@@ -25,7 +41,7 @@ class LLMSettings(BaseModel):
         default="gemini-3.6-flash",
         description="Target model identifier (e.g. gemini-3.6-flash, gpt-4o-mini, llama-3.1-70b)"
     )
-    base_url: Optional[str] = Field(
+    base_url: str | None = Field(
         default=None,
         description="Custom base URL for OpenAI-compatible gateways, local Ollama, vLLM, or LiteLLM proxy"
     )
@@ -89,26 +105,79 @@ class LLMSettings(BaseModel):
         )
 
 
+
+
 class AppSettings(BaseModel):
-    """General Application Settings."""
+    """General Application & Security Settings."""
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8001)
     environment: str = Field(default="development")
-    taxonomy_path: str = Field(default="docs/ai-contract/skills_seed.json")
+    taxonomy_path: str = Field(default_factory=resolve_taxonomy_path)
+
+    # CORS Settings
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8080",
+        ]
+    )
+    cors_allowed_methods: list[str] = Field(default_factory=lambda: ["GET", "POST", "OPTIONS"])
+    cors_allowed_headers: list[str] = Field(default_factory=lambda: ["Content-Type", "Authorization", "X-API-Key", "Accept"])
+    cors_allow_credentials: bool = Field(default=True)
+
+    # API Protection & Security Settings
+    api_key: str | None = Field(default=None)
+    enable_api_key_auth: bool = Field(default=False)
+    rate_limit_per_minute: int = Field(default=60)
+    enable_rate_limiting: bool = Field(default=True)
 
 
-@lru_cache()
+@lru_cache
 def get_llm_settings() -> LLMSettings:
     """Returns cached singleton instance of centralized LLM settings."""
     return LLMSettings.load_from_env()
 
 
-@lru_cache()
+@lru_cache
 def get_app_settings() -> AppSettings:
     """Returns cached singleton instance of app settings."""
+    raw_taxonomy = os.getenv("TAXONOMY_PATH", "")
+
+    cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    if cors_origins_env:
+        cors_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+    else:
+        cors_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8080",
+        ]
+
+    # If "*" is in allowed origins, allow_credentials MUST be False according to CORS specification
+    allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() in ("true", "1")
+    if "*" in cors_origins:
+        allow_credentials = False
+
     return AppSettings(
         host=os.getenv("API_HOST", "127.0.0.1"),
         port=int(os.getenv("API_PORT", "8001")),
         environment=os.getenv("ENVIRONMENT", "development"),
-        taxonomy_path=os.getenv("TAXONOMY_PATH", "docs/ai-contract/skills_seed.json")
+        taxonomy_path=resolve_taxonomy_path(raw_taxonomy) if raw_taxonomy else resolve_taxonomy_path(),
+        cors_allowed_origins=cors_origins,
+        cors_allowed_methods=[m.strip().upper() for m in os.getenv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS").split(",") if m.strip()],
+        cors_allowed_headers=[h.strip() for h in os.getenv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-API-Key,Accept").split(",") if h.strip()],
+        cors_allow_credentials=allow_credentials,
+        api_key=os.getenv("SERVICE_API_KEY") or os.getenv("API_KEY") or None,
+        enable_api_key_auth=os.getenv("ENABLE_API_KEY_AUTH", "false").lower() in ("true", "1"),
+        rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
+        enable_rate_limiting=os.getenv("ENABLE_RATE_LIMITING", "true").lower() in ("true", "1"),
     )
+
+

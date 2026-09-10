@@ -1,6 +1,6 @@
-import re
 import logging
-from typing import List, Dict, Any, Optional, Set
+import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class ProjectLinkAssociator:
     """
     Precision Project-to-URL Association Engine.
-    
+
     Adheres strictly to the 7 project-link association rules:
       1. Extract all URLs/hyperlinks from the CV.
       2. Associate a URL with a project ONLY when there is strong evidence.
@@ -36,7 +36,7 @@ class ProjectLinkAssociator:
     }
 
     @classmethod
-    def extract_candidate_urls(cls, full_text: str, document_urls: Optional[List[str]] = None) -> List[str]:
+    def extract_candidate_urls(cls, full_text: str, document_urls: list[str] | None = None) -> list[str]:
         """
         Extracts and filters all potential project URLs from raw text and document annotations.
         Rejects LinkedIn, social profiles, and pure GitHub user account URLs.
@@ -45,7 +45,7 @@ class ProjectLinkAssociator:
         if document_urls:
             found_urls.extend(document_urls)
 
-        candidates: List[str] = []
+        candidates: list[str] = []
         for raw_url in found_urls:
             clean = raw_url.strip().rstrip(".,)]\"'")
             if not (clean.startswith("http://") or clean.startswith("https://")):
@@ -72,7 +72,7 @@ class ProjectLinkAssociator:
         return re.sub(r"[^a-z0-9]", "", text.lower())
 
     @classmethod
-    def _extract_tokens(cls, text: str) -> Set[str]:
+    def _extract_tokens(cls, text: str) -> set[str]:
         """Extracts distinctive word tokens splitting CamelCase and punctuation."""
         s = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
         words = re.findall(r"[a-z0-9]+", s.lower())
@@ -129,15 +129,15 @@ class ProjectLinkAssociator:
     @classmethod
     def associate_projects_with_links(
         cls,
-        projects: List[Dict[str, Any]],
+        projects: list[dict[str, Any]],
         full_text: str,
-        document_urls: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+        document_urls: list[str] | None = None
+    ) -> list[dict[str, Any]]:
         """
         Assigns URLs to projects adhering to the 7 strict rules.
         """
         candidate_urls = cls.extract_candidate_urls(full_text, document_urls)
-        claimed_urls: Set[str] = set()
+        claimed_urls: set[str] = set()
 
         for proj in projects:
             title = proj.get("title", "").strip()
@@ -165,7 +165,7 @@ class ProjectLinkAssociator:
                 continue
 
             # Otherwise, search among available candidate URLs for strong evidence
-            best_url: Optional[str] = None
+            best_url: str | None = None
             best_score = 0.0
 
             for candidate in candidate_urls:

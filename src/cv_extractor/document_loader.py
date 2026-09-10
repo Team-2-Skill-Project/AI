@@ -1,8 +1,5 @@
-import os
-import io
 import logging
 from pathlib import Path
-from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +13,14 @@ class DocumentLoader:
     SUPPORTED_EXTENSIONS = {
         ".pdf": "pdf",
         ".docx": "docx",
-        ".doc": "doc",
         ".txt": "text",
         ".md": "text",
     }
 
     def __init__(self):
-        self.extracted_links: List[str] = []
+        self.extracted_links: list[str] = []
 
-    def load_text(self, file_path: str) -> Tuple[str, str]:
+    def load_text(self, file_path: str) -> tuple[str, str]:
         """
         Loads and extracts text from supported digital CV documents.
         Returns: (extracted_text, document_format)
@@ -93,7 +89,7 @@ class DocumentLoader:
                             continue
 
                 # Sort links in reading order: top-to-bottom (descending y), left-to-right (ascending x)
-                page_links.sort(key=lambda l: (-l["y2"], l["x1"]))
+                page_links.sort(key=lambda link_item: (-link_item["y2"], link_item["x1"]))
 
                 # 2. Extract text and inject hyperlinks inline at their exact text position
                 chunks = []
@@ -121,7 +117,7 @@ class DocumentLoader:
                         if is_anchor:
                             if y_match:
                                 # If multiple links on the same line, pick the horizontally matching link
-                                nearby_links = [l for l in page_links if not l["used"] and l["y1"] - 8 <= y <= l["y2"] + 8]
+                                nearby_links = [item for item in page_links if not item["used"] and item["y1"] - 8 <= y <= item["y2"] + 8]
                                 if len(nearby_links) == 1 or (link["x1"] - 50 <= x <= link["x2"] + 100):
                                     matched_link = link
                                     break
@@ -151,7 +147,7 @@ class DocumentLoader:
 
         except Exception as e:
             logger.error(f"pypdf extraction failed for {path}: {e}")
-            raise ValueError(f"Failed to read PDF document '{path.name}': {str(e)}")
+            raise ValueError(f"Failed to read PDF document '{path.name}': {e!s}")
 
         full_text = "\n".join(text_pages).strip()
         if not full_text:
@@ -195,8 +191,8 @@ class DocumentLoader:
             return "\n".join(lines)
         except ImportError:
             # Fallback direct zip XML extraction if python-docx isn't installed
-            import zipfile
             import xml.etree.ElementTree as ET
+            import zipfile
             with zipfile.ZipFile(str(path)) as z:
                 xml_content = z.read("word/document.xml")
             tree = ET.fromstring(xml_content)
@@ -205,7 +201,7 @@ class DocumentLoader:
             return " ".join(node.text for node in text_nodes if node.text)
         except Exception as e:
             logger.error(f"DOCX extraction error for {path}: {e}")
-            raise ValueError(f"Failed to extract text from DOCX file '{path.name}': {str(e)}")
+            raise ValueError(f"Failed to extract text from DOCX file '{path.name}': {e!s}")
 
     def _extract_plain_text(self, path: Path) -> str:
         """Reads plain text files with UTF-8 encoding."""

@@ -1,10 +1,12 @@
-import os
-import re
+import asyncio
 import json
 import logging
+import re
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
 from functools import lru_cache
+from typing import Any
+
+from pydantic import BaseModel
 
 from .config import LLMSettings, get_llm_settings
 
@@ -15,14 +17,12 @@ class BaseLLMProvider(ABC):
     """Abstract interface for LLM provider implementations."""
 
     @abstractmethod
-    def generate_text(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         """Generates raw text response."""
-        pass
 
     @abstractmethod
     def is_available(self) -> bool:
         """Returns True if the provider is properly configured with an API key/endpoint."""
-        pass
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -57,7 +57,7 @@ class GeminiProvider(BaseLLMProvider):
     def is_available(self) -> bool:
         return self._model is not None and bool(self.settings.api_key)
 
-    def generate_text(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         if not self.is_available():
             raise RuntimeError("Gemini provider is not configured with a valid API key.")
 
@@ -80,7 +80,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     def is_available(self) -> bool:
         return bool(self.api_key) or ("localhost" in self.base_url or "127.0.0.1" in self.base_url)
 
-    def generate_text(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         if not self.is_available():
             raise RuntimeError(f"OpenAI-compatible provider ({self.base_url}) is not configured.")
 
@@ -118,7 +118,7 @@ class LLMService:
     All AI features in SkillMatch consume this service without hardcoding providers or keys.
     """
 
-    def __init__(self, settings: Optional[LLMSettings] = None):
+    def __init__(self, settings: LLMSettings | None = None):
         self.settings = settings or get_llm_settings()
         self.provider = self._create_provider(self.settings)
 
@@ -138,30 +138,102 @@ class LLMService:
         """Returns True if the underlying LLM provider is configured and available."""
         return self.provider.is_available()
 
-    def generate_text(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         """Generates text from the configured LLM provider."""
         return self.provider.generate_text(prompt=prompt, system_prompt=system_prompt)
 
-    def generate_json(self, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+    def generate_json(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        schema: type[BaseModel] | None = None
+    ) -> dict[str, Any] | list[Any] | BaseModel:
         """
         Generates and parses JSON from the LLM provider.
-        Automatically removes markdown formatting backticks if present.
+        Uses multi-stage stream parsing to avoid greedy regex issues (e.g. JSONDecodeError: Extra data).
+        If a Pydantic schema is provided, validates and returns the parsed model instance.
         """
         raw_text = self.generate_text(prompt=prompt, system_prompt=system_prompt)
-        
-        # Clean markdown wrappers (```json ... ```)
-        cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text, flags=re.MULTILINE)
-        cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE).strip()
+        parsed_data = self._clean_and_parse_json(raw_text)
 
-        # Extract JSON object substring if surrounding text exists
-        match = re.search(r"(\{.*\})", cleaned, flags=re.DOTALL)
-        if match:
-            cleaned = match.group(1)
+        if schema:
+            if isinstance(parsed_data, dict) or isinstance(parsed_data, list):
+                return schema.model_validate(parsed_data)
+        return parsed_data
 
-        return json.loads(cleaned)
+    async def generate_text_async(self, prompt: str, system_prompt: str | None = None) -> str:
+        """Asynchronously generates text from the configured LLM provider without blocking the event loop."""
+        return await asyncio.to_thread(self.generate_text, prompt=prompt, system_prompt=system_prompt)
+
+    async def generate_json_async(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        schema: type[BaseModel] | None = None
+    ) -> dict[str, Any] | list[Any] | BaseModel:
+        """Asynchronously generates and parses JSON without blocking the event loop."""
+        return await asyncio.to_thread(self.generate_json, prompt=prompt, system_prompt=system_prompt, schema=schema)
+
+    @staticmethod
+    def _clean_and_parse_json(raw_text: str) -> dict[str, Any] | list[Any]:
+        """
+        Robust multi-stage parser that extracts and validates JSON from raw LLM output.
+        Avoids greedy regular expressions to prevent 'JSONDecodeError: Extra data' when
+        responses contain multiple JSON objects or conversational text.
+        """
+        if not raw_text or not raw_text.strip():
+            raise ValueError("Empty response received from LLM")
+
+        text = raw_text.strip()
+
+        # Stage 1: Direct JSON parsing
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Stage 2: Markdown code blocks extraction (```json ... ``` or ``` ... ```)
+        code_block_matches = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", text, flags=re.IGNORECASE)
+        for block in code_block_matches:
+            block_clean = block.strip()
+            try:
+                return json.loads(block_clean)
+            except json.JSONDecodeError:
+                pass
+
+        # Stage 3: Stream balanced decoding using json.JSONDecoder.raw_decode
+        # Locates each opening '{' or '[' and attempts precise single-object parsing
+        decoder = json.JSONDecoder()
+        start_indices = [m.start() for m in re.finditer(r"[\{\[]", text)]
+        for idx in start_indices:
+            try:
+                parsed_obj, _ = decoder.raw_decode(text[idx:])
+                return parsed_obj
+            except json.JSONDecodeError:
+                continue
+
+        # Stage 4: Auto-repair heuristics (e.g. trailing commas before '}' or ']')
+        repaired_text = re.sub(r",\s*([\}\]])", r"\1", text)
+        try:
+            return json.loads(repaired_text)
+        except json.JSONDecodeError:
+            pass
+
+        repaired_indices = [m.start() for m in re.finditer(r"[\{\[]", repaired_text)]
+        for idx in repaired_indices:
+            try:
+                parsed_obj, _ = decoder.raw_decode(repaired_text[idx:])
+                return parsed_obj
+            except json.JSONDecodeError:
+                continue
+
+        # Stage 5: If all stages fail, raise a descriptive ValueError
+        snippet = text[:200] + ("..." if len(text) > 200 else "")
+        raise ValueError(f"Failed to extract valid JSON from LLM response: {snippet}")
 
 
-@lru_cache()
+
+@lru_cache
 def get_llm_service() -> LLMService:
     """Returns cached singleton instance of centralized LLM service."""
     return LLMService(get_llm_settings())

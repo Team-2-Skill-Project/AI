@@ -1,30 +1,40 @@
-from .common import SkillLevel, RequirementImportance, ConfidenceTier, get_confidence_tier
-from .taxonomy import SkillTaxonomyItem
 from .candidate import (
     Candidate,
-    CandidateProfileDetails,
     CandidatePreferences,
+    CandidateProfileDetails,
     CandidateSkill,
-    EvidenceItem,
+    CertificationItem,
+    CVExtractionSchema,
     EducationItem,
+    EvidenceItem,
     ExperienceItem,
     ProjectItem,
-    CertificationItem,
+    RawSkillItem,
 )
+from .common import (
+    ConfidenceTier,
+    RequirementImportance,
+    SkillLevel,
+    get_confidence_tier,
+)
+from .taxonomy import SkillTaxonomyItem
 
 __all__ = [
-    "SkillLevel",
-    "RequirementImportance",
-    "ConfidenceTier",
-    "get_confidence_tier",
-    "SkillTaxonomyItem",
+    "CVExtractionSchema",
     "Candidate",
-    "CandidateProfileDetails",
     "CandidatePreferences",
+    "CandidateProfileDetails",
     "CandidateSkill",
-    "EvidenceItem",
+    "CertificationItem",
+    "ConfidenceTier",
     "EducationItem",
+    "EvidenceItem",
     "ExperienceItem",
     "ProjectItem",
-    "CertificationItem",
+    "RawSkillItem",
+    "RequirementImportance",
+    "SkillLevel",
+    "SkillTaxonomyItem",
+    "get_confidence_tier",
 ]
+

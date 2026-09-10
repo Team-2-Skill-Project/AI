@@ -1,9 +1,6 @@
-import pytest
+from src.cv_extractor.confidence_scorer import ConfidenceScorer
 from src.models.candidate import EvidenceItem
 from src.models.common import SkillLevel
-from src.cv_extractor.confidence_scorer import ConfidenceScorer
-from src.cv_extractor.evidence_linker import EvidenceLinker
-from src.taxonomy.taxonomy_manager import TaxonomyManager
 
 
 def test_confidence_scoring_formula():
@@ -42,3 +39,28 @@ def test_level_inference():
     ]
     level_adv = ConfidenceScorer.infer_level(ev_exp)
     assert level_adv == SkillLevel.ADVANCED
+
+
+def test_raw_level_precedence_and_synonyms():
+    # Only skills section normally yields BEGINNER
+    ev_skills = [EvidenceItem(type="skills_section", text="Python", source="cv", section="skills")]
+
+    # Without raw_level -> BEGINNER
+    assert ConfidenceScorer.infer_level(ev_skills) == SkillLevel.BEGINNER
+
+    # With raw_level="expert" -> EXPERT
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="expert") == SkillLevel.EXPERT
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="Expert") == SkillLevel.EXPERT
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="master") == SkillLevel.EXPERT
+
+    # With raw_level="advanced" / "senior" -> ADVANCED
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="advanced") == SkillLevel.ADVANCED
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="senior") == SkillLevel.ADVANCED
+
+    # With raw_level="intermediate" -> INTERMEDIATE
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="intermediate") == SkillLevel.INTERMEDIATE
+
+    # With raw_level="unknown" or empty -> falls back to evidence
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="unknown") == SkillLevel.BEGINNER
+    assert ConfidenceScorer.infer_level(ev_skills, raw_level="") == SkillLevel.BEGINNER
+
