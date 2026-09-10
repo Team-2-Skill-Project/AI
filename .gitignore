@@ -38,6 +38,13 @@ venv.bak/
 .coverage
 htmlcov/
 .mypy_cache/
+.ruff_cache/
+
+# Local runtime data
+*.db
+*.sqlite
+*.sqlite3
+*.log
 
 # IDE & OS
 .vscode/

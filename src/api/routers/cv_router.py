@@ -22,6 +22,7 @@ from src.api.dependencies import get_cv_pipeline
 from src.api.schemas.cv_schemas import CVJobResponse, ExtractionErrorResponse, JobStatus
 from src.cv_extractor.pipeline import CVExtractionPipeline
 from src.models.candidate import Candidate
+from src.schemas.cv import ExtractTextRequest
 
 logger = logging.getLogger(__name__)
 
@@ -295,3 +296,47 @@ async def get_job_status(job_id: str):
         error=job.get("error"),
         error_code=job.get("error_code"),
     )
+
+
+@router.post(
+    "/extract-text",
+    response_model=Candidate,
+    status_code=status.HTTP_200_OK,
+    summary="Extract Structured Profile from Raw CV Text",
+    description="Extracts a candidate profile from raw CV text using the canonical AI-Serv5 pipeline.",
+    responses={
+        200: {"description": "Successfully extracted candidate profile", "model": Candidate},
+        400: {"description": "Invalid input text payload", "model": ExtractionErrorResponse},
+        500: {"description": "Internal processing error during extraction", "model": ExtractionErrorResponse},
+    },
+)
+async def extract_cv_text(
+    payload: ExtractTextRequest,
+    pipeline: CVExtractionPipeline = Depends(get_cv_pipeline),
+):
+    """Expose text extraction without introducing a second CV implementation."""
+    if not payload.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"detail": "The CV text payload cannot be empty.", "error_code": "EMPTY_PAYLOAD"},
+        )
+
+    try:
+        return await asyncio.to_thread(
+            pipeline.extract_from_text,
+            raw_text=payload.text,
+            file_name=None,
+            candidate_id=payload.candidate_id,
+        )
+    except ValueError as ve:
+        logger.warning("CV text extraction value error: %s", ve)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"detail": str(ve), "error_code": "EXTRACTION_FAILED"},
+        ) from ve
+    except Exception as exc:
+        logger.error("Unexpected error during CV text extraction: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"detail": f"An error occurred while processing the CV text: {exc!s}", "error_code": "INTERNAL_SERVER_ERROR"},
+        ) from exc

@@ -14,6 +14,37 @@
 
 ---
 
+## Unified Runtime (AI-Serv5)
+
+This repository is the single working copy for the SkillMatch AI services. The feature work from `AI-Srtv5_part_two` is integrated under the existing `src/` package while the original CV pipeline remains the canonical implementation.
+
+### Source of truth
+
+- CV extraction: `src/cv_extractor` and `src/api/routers/cv_router.py`
+- Unified FastAPI application: `src/api/main.py` (also exported by `src/main.py`)
+- AI adapters, prompts, chains, and tools: `src/ai`
+- Feature services and schemas: `src/services`, `src/schemas`
+- Persistence and background work: `src/db`, `src/workers`
+
+Do not create a second CV pipeline under `src/api/v1`; that path only exposes compatibility routes for the unified application.
+
+### Quick start
+
+```bash
+python -m pip install -r requirements.txt
+uvicorn src.api.main:app --reload
+```
+
+Run the complete test suite with:
+
+```bash
+pytest -q
+```
+
+The merged API includes the canonical CV endpoints plus matching, interview, and review-queue routes. Configure the active provider with `.env` (for example `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_NAME`, `DATABASE_URL`, and `REDIS_URL`) before calling provider-backed features.
+
+---
+
 ## How to Read This Report
 
 Every feature below follows the same three-part structure, so the team can review, debate, and estimate consistently:
