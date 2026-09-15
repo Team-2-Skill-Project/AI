@@ -22,6 +22,7 @@ from src.api.dependencies import get_cv_pipeline
 from src.api.schemas.cv_schemas import CVJobResponse, ExtractionErrorResponse, JobStatus
 from src.cv_extractor.pipeline import CVExtractionPipeline
 from src.models.candidate import Candidate
+from src.repositories.candidate_repository import candidate_repository
 from src.schemas.cv import ExtractTextRequest
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ def _run_cv_background_extraction(
             file_path=temp_file_path,
             candidate_id=candidate_id
         )
+        candidate_repository.save_candidate(candidate_profile)
         _cv_jobs[job_id]["status"] = JobStatus.COMPLETED
         _cv_jobs[job_id]["result"] = candidate_profile
     except ValueError as ve:
@@ -151,6 +153,7 @@ async def extract_cv_file(
             file_path=temp_file_path,
             candidate_id=candidate_id
         )
+        candidate_repository.save_candidate(candidate_profile)
         return candidate_profile
 
     except HTTPException:
@@ -322,12 +325,14 @@ async def extract_cv_text(
         )
 
     try:
-        return await asyncio.to_thread(
+        candidate_profile = await asyncio.to_thread(
             pipeline.extract_from_text,
             raw_text=payload.text,
             file_name=None,
             candidate_id=payload.candidate_id,
         )
+        candidate_repository.save_candidate(candidate_profile)
+        return candidate_profile
     except ValueError as ve:
         logger.warning("CV text extraction value error: %s", ve)
         raise HTTPException(

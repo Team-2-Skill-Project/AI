@@ -19,6 +19,7 @@ from src.api.v1.routers import (
     matches_router,
     review_queue_router,
     roadmap_router,
+    recommendations_router,
     router as interview_router,
 )
 # pyrefly: ignore [missing-import]
@@ -166,7 +167,14 @@ app.include_router(cv_router, dependencies=[Depends(check_rate_limit), Depends(v
 
 # The rest of the feature routes use the shared version prefix and inherit the
 # global rate limiter. API-key protection is applied consistently here too.
-for feature_router in (interview_router, matches_router, review_queue_router, job_router, roadmap_router):
+for feature_router in (
+    interview_router,
+    matches_router,
+    review_queue_router,
+    job_router,
+    roadmap_router,
+    recommendations_router,
+):
     app.include_router(
         feature_router,
         prefix=settings.API_V1_STR,
@@ -197,6 +205,7 @@ async def health_check():
             "interview_coach": "active",
             "review_queue": "active",
             "job_description_understanding": "active",
+            "personalized_job_recommendations": "active",
         },
     }
 
