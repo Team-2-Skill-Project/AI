@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -21,10 +22,14 @@ class RoadmapRepository(BaseRepository[RoadmapModel]):
 
     def save_roadmap(self, roadmap: RoadmapSchema) -> RoadmapModel:
         """Upsert candidate roadmap in the database."""
-        existing = self.get_by_candidate(roadmap.candidate_id)
+        existing = self.db.query(RoadmapModel).filter(
+            (RoadmapModel.roadmap_id == roadmap.roadmap_id) | (RoadmapModel.candidate_id == roadmap.candidate_id)
+        ).first()
         payload_str = json.dumps(roadmap.model_dump())
 
         if existing:
+            existing.roadmap_id = roadmap.roadmap_id
+            existing.candidate_id = roadmap.candidate_id
             existing.target_role = roadmap.target_role
             existing.role_family = roadmap.role_family
             existing.total_weeks = roadmap.total_weeks

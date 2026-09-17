@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi import APIRouter, status
 from src.schemas.interview import (
     QuestionGenerationRequest,

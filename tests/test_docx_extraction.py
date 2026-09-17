@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pathlib import Path
 from src.cv_extractor.document_loader import DocumentLoader
 

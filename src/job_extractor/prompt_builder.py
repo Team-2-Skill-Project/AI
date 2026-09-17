@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Prompt builder for the Job Description Understanding pipeline.
 

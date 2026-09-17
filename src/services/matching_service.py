@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from typing import Optional, List, Dict, Any, Union, Set
 from src.ai.chains.match_explanation import MatchExplanationChain

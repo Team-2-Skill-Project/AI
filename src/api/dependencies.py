@@ -1,3 +1,4 @@
+from __future__ import annotations
 from functools import lru_cache
 
 from src.core.config import get_app_settings

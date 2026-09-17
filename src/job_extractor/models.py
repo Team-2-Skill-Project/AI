@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Pydantic v2 output schemas for the Job Description Understanding feature."""
 
 from typing import Literal

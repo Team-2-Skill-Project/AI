@@ -1,3 +1,4 @@
+from __future__ import annotations
 from src.middleware.llm_middleware import (
     DynamicLLMMiddleware,
     LLMContext,

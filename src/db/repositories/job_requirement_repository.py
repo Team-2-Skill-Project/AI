@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Repository for persisting JobRequirementProfile results to the jobs table.
 

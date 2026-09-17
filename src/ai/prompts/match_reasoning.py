@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Prompt definitions for AI Recruiter & Career Analyst Skill Gap Analysis.
 """

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Job Description Understanding — public exports."""
 
 from .models import JobRequirementProfile, NormalizedSkill, RawSkillItem

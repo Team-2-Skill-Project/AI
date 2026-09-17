@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -105,3 +106,39 @@ async def test_roadmap_adaptation_refresh(test_db):
     cited_gaps = [p.cited_gap for p in refreshed.phases]
     assert "Next.js" in cited_gaps
     assert "Web Performance" in cited_gaps
+
+
+@pytest.mark.asyncio
+async def test_roadmap_enrichment(test_db):
+    from src.db.models.skill_resource import SkillResourceModel
+    
+    # Insert a dummy resource
+    resource = SkillResourceModel(
+        skill_id="skill_docker",
+        video_id="dummy_video_id_123",
+        title="Docker Tutorial for Beginners",
+        channel_name="Tech Channel",
+        status="approved"
+    )
+    test_db.add(resource)
+    test_db.commit()
+
+    request = RoadmapGenerationRequest(
+        candidate_id="cand_test_104",
+        target_role="DevOps Engineer",
+        role_family="DevOps",
+        skill_gaps=["Docker"],
+    )
+    
+    roadmap = await roadmap_service.create_roadmap(request, db=test_db)
+    
+    # Check if the resource was enriched
+    found_resource = False
+    for phase in roadmap.phases:
+        for milestone in phase.milestones:
+            for task in milestone.tasks:
+                if any(link.video_id == "dummy_video_id_123" or link.url.endswith("dummy_video_id_123") for link in task.resource_links):
+                    found_resource = True
+                    break
+    
+    assert found_resource, "The roadmap should be enriched with the approved YouTube resource"

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 3-step Job Description Understanding pipeline orchestrator.
 

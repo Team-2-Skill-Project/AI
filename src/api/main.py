@@ -1,3 +1,4 @@
+from __future__ import annotations
 """FastAPI application entry point for the unified SkillMatch service."""
 
 import logging

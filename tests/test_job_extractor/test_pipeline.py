@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Unit tests for the Job Description Understanding pipeline and skill normalizer.
 

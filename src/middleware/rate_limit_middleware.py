@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 from typing import Callable, Set
 from starlette.middleware.base import BaseHTTPMiddleware

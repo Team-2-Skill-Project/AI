@@ -1,4 +1,6 @@
-from src.core.config import Settings, LLMSettings
+from __future__ import annotations
+import pytest
+from src.core.config import Settings, LLMSettings, get_llm_settings
 
 
 def test_settings_provider_and_model_parsing():

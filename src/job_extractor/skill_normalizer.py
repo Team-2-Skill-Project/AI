@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Skill normalization layer for the Job Description Understanding pipeline.
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 LLM-backed extractor for the Job Description Understanding pipeline.
 

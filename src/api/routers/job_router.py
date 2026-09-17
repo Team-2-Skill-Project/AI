@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 FastAPI router for the Job Description Understanding feature.
 

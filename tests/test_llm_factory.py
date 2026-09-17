@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pytest
 from src.core.llm import get_llm
 from src.middleware.llm_middleware import (

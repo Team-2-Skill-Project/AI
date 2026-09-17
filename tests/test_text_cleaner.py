@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 
 from src.utils.text_cleaner import TextCleaner

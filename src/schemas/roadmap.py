@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Pydantic v2 output and request/response schemas for Feature 7: Dynamic Career Roadmap."""
 
 from datetime import datetime
@@ -12,6 +13,14 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class ResourceLinkSchema(BaseModel):
+    type: str = Field(description="Type of resource (e.g., 'video', 'documentation')")
+    url: str = Field(description="URL to the resource")
+    title: str = Field(description="Title of the resource")
+    thumbnail_url: Optional[str] = Field(default=None, description="Optional thumbnail URL for the resource")
+    video_id: Optional[str] = Field(default=None, description="Optional YouTube video ID")
+
+
 class RoadmapTask(BaseModel):
     task_id: str = Field(description="Unique task identifier")
     title: str = Field(description="Title of the learning or action item")
@@ -19,7 +28,7 @@ class RoadmapTask(BaseModel):
     estimated_hours: float = Field(default=2.0, description="Estimated time to complete in hours", ge=0.5)
     status: TaskStatus = Field(default=TaskStatus.NOT_STARTED, description="Current progress status")
     cited_gap: str = Field(description="The underlying skill gap this task addresses")
-    resource_links: List[str] = Field(default=[], description="Suggested learning resource URLs or documentation references")
+    resource_links: List[ResourceLinkSchema] = Field(default=[], description="Suggested learning resources")
 
 
 class RoadmapMilestone(BaseModel):

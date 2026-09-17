@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Integration tests for POST /api/v1/jobs/analyze endpoint.
 

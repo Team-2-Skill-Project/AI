@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Any, List, Optional
@@ -9,6 +10,7 @@ from src.schemas.roadmap import (
     RoadmapPhase,
     RoadmapSchema,
     RoadmapTask,
+    ResourceLinkSchema,
     TaskStatus,
 )
 
@@ -118,7 +120,13 @@ class RoadmapGenerationChain:
                             estimated_hours=3.0,
                             status=TaskStatus.NOT_STARTED,
                             cited_gap=gap,
-                            resource_links=[f"https://docs.example.com/{gap.lower().replace(' ', '-')}"]
+                            resource_links=[
+                                ResourceLinkSchema(
+                                    type="documentation",
+                                    url=f"https://docs.example.com/{gap.lower().replace(' ', '-')}",
+                                    title=f"{gap} Documentation",
+                                )
+                            ]
                         ),
                         RoadmapTask(
                             task_id=f"task_{idx}_1_2",

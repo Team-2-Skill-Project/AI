@@ -1,3 +1,5 @@
+from __future__ import annotations
+import re
 import logging
 from datetime import datetime
 from typing import Optional
@@ -44,13 +46,13 @@ class RoadmapService:
         try:
             repo = RoadmapRepository(session)
             repo.save_roadmap(roadmap)
+            return self._enrich_roadmap_with_resources(roadmap, session)
         except Exception as err:
             logger.error("Failed to persist generated roadmap: %s", err, exc_info=True)
+            return roadmap
         finally:
             if should_close:
                 session.close()
-
-        return roadmap
 
     def get_candidate_roadmap(
         self,
@@ -64,10 +66,89 @@ class RoadmapService:
             record = repo.get_by_candidate(candidate_id)
             if not record:
                 return None
-            return RoadmapSchema(**record.to_dict())
+            roadmap = RoadmapSchema(**record.to_dict())
+            return self._enrich_roadmap_with_resources(roadmap, session)
         finally:
             if should_close:
                 session.close()
+
+    def _enrich_roadmap_with_resources(self, roadmap: RoadmapSchema, session: Session) -> RoadmapSchema:
+        try:
+            # pyrefly: ignore [missing-import]
+            from src.db.models.skill_resource import SkillResourceModel
+            # pyrefly: ignore [missing-import]
+            from src.taxonomy.taxonomy_manager import TaxonomyManager
+            # pyrefly: ignore [missing-import]
+            from src.schemas.roadmap import ResourceLinkSchema
+            
+            taxonomy = TaxonomyManager()
+            for phase in roadmap.phases:
+                for milestone in phase.milestones:
+                    for task in milestone.tasks:
+                        gap_query = task.cited_gap
+                        skill_id, _, _ = taxonomy.normalize_skill(gap_query, strict=False)
+                        
+                        # If strict taxonomy matching fails, clean up the gap string (e.g. "Redis Caching & Pub/Sub" -> "Redis")
+                        if not skill_id and ("&" in gap_query or "/" in gap_query or " " in gap_query):
+                            first_keyword = re.split(r"[&/,]", gap_query)[0].strip()
+                            skill_id, _, _ = taxonomy.normalize_skill(first_keyword, strict=False)
+
+                        resources = []
+                        if skill_id:
+                            resources = session.query(SkillResourceModel).filter(
+                                SkillResourceModel.skill_id == skill_id,
+                                SkillResourceModel.status == "approved"
+                            ).all()
+                            
+                        # If DB has approved resources for this skill_id, attach them
+                        if resources:
+                            for res in resources:
+                                link = ResourceLinkSchema(
+                                    type="video",
+                                    url=f"https://www.youtube.com/watch?v={res.video_id}",
+                                    title=res.title,
+                                    thumbnail_url=res.thumbnail_url,
+                                    video_id=res.video_id,
+                                )
+                                if not any(existing.url == link.url for existing in task.resource_links):
+                                    task.resource_links.append(link)
+                        else:
+                            # Fallback: Live DuckDuckGo search for YouTube video tutorials
+                            from src.workers.youtube_fetcher import fetch_from_duckduckgo
+                            ddg_items = fetch_from_duckduckgo(gap_query, max_results=2)
+                            for item in ddg_items:
+                                link = ResourceLinkSchema(
+                                    type="video",
+                                    url=item.get("url", f"https://www.youtube.com/watch?v={item['video_id']}"),
+                                    title=item["title"],
+                                    thumbnail_url=item.get("thumbnail_url"),
+                                    video_id=item["video_id"],
+                                )
+                                if not any(existing.url == link.url for existing in task.resource_links):
+                                    task.resource_links.append(link)
+                                
+                                # Optionally cache into DB for future requests
+                                try:
+                                    existing_res = session.query(SkillResourceModel).filter(
+                                        SkillResourceModel.video_id == item["video_id"]
+                                    ).first()
+                                    if not existing_res:
+                                        new_res = SkillResourceModel(
+                                            skill_id=skill_id or f"skill_{abs(hash(gap_query)) % 1000000}",
+                                            video_id=item["video_id"],
+                                            title=item["title"],
+                                            channel_name=item.get("channel_name", "YouTube"),
+                                            thumbnail_url=item.get("thumbnail_url"),
+                                            status="approved"
+                                        )
+                                        session.add(new_res)
+                                        session.commit()
+                                except Exception:
+                                    session.rollback()
+        except Exception as e:
+            logger.error(f"Error enriching roadmap with resources: {e}")
+        
+        return roadmap
 
     def update_task_progress(
         self,

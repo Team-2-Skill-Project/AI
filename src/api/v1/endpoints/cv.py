@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Compatibility export for the canonical CV router.
 
 The CV extraction implementation intentionally lives in ``src.cv_extractor``

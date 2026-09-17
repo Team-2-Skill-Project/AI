@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 from typing import Generator
 from sqlalchemy import create_engine, inspect, text
@@ -39,6 +40,7 @@ def init_db() -> None:
         import src.db.models.interview
         import src.db.models.job_requirement  # noqa: F401 — registers AI-contract columns
         import src.db.models.roadmap
+        import src.db.models.skill_resource
 
         Base.metadata.create_all(bind=engine)
         _ensure_job_columns()

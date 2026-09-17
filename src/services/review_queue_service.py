@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
@@ -127,6 +128,11 @@ class ReviewQueueService:
         db: Session
     ) -> Optional[ReviewQueueItemResponse]:
         repo = ReviewQueueRepository(db)
+        
+        item = repo.get_by_id(item_id)
+        if not item:
+            return None
+
         resolution_data = {
             "adjusted_score": req.adjusted_score,
             "adjusted_qualification_status": req.adjusted_qualification_status,
@@ -139,6 +145,29 @@ class ReviewQueueService:
             resolution=resolution_data,
             reviewer_id=req.reviewer_id,
         )
+
+        if record and record.item_type == "youtube_resource" and req.status == "approved":
+            from src.db.models.skill_resource import SkillResourceModel
+            import json
+            payload = json.loads(record.payload_json) if record.payload_json else {}
+            if payload:
+                # Upsert resource
+                resource = db.query(SkillResourceModel).filter(SkillResourceModel.video_id == payload.get("video_id")).first()
+                if not resource:
+                    resource = SkillResourceModel(
+                        skill_id=payload.get("skill_id"),
+                        video_id=payload.get("video_id"),
+                        title=payload.get("title"),
+                        channel_name=payload.get("channel_name"),
+                        thumbnail_url=payload.get("thumbnail_url"),
+                        duration=payload.get("duration"),
+                        status="approved"
+                    )
+                    db.add(resource)
+                else:
+                    resource.status = "approved"
+                db.commit()
+
         return ReviewQueueItemResponse(**record.to_dict()) if record else None
 
 review_queue_service = ReviewQueueService()

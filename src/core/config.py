@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Central application configuration.
 
 The original CV service and the feature services used two different settings
@@ -6,15 +7,19 @@ and adds the feature-service settings behind one shared ``settings`` object.
 """
 
 import os
+import logging
 import warnings
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 

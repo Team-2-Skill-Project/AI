@@ -1,3 +1,4 @@
+from __future__ import annotations
 """The single LangChain LLM construction boundary for SkillMatch."""
 
 import json

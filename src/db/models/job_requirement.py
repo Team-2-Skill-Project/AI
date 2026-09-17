@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 SQLAlchemy ORM model for persisting job requirement profiles.
 

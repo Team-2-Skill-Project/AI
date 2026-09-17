@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 from src.main import app

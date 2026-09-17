@@ -1,3 +1,4 @@
+from __future__ import annotations
 import time
 import pytest
 from unittest.mock import patch, MagicMock

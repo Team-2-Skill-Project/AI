@@ -1,3 +1,4 @@
+from __future__ import annotations
 """FastAPI request/response schemas for the Job Description Understanding endpoint."""
 
 from pydantic import BaseModel, Field

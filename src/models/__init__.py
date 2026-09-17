@@ -1,3 +1,4 @@
+from __future__ import annotations
 from .candidate import (
     Candidate,
     CandidatePreferences,
