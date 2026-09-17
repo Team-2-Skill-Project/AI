@@ -1,3 +1,4 @@
+from __future__ import annotations
 """FastAPI application entry point for the unified SkillMatch service."""
 
 import logging
@@ -10,19 +11,27 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
+# pyrefly: ignore [missing-import]
 from src.api.routers.cv_router import router as cv_router
+from src.api.routers.job_router import router as job_router
 from src.api.schemas.cv_schemas import ExtractionErrorResponse
 from src.api.security import check_rate_limit, verify_api_key
 from src.api.v1.routers import (
     matches_router,
     review_queue_router,
+    roadmap_router,
+    recommendations_router,
     router as interview_router,
 )
+# pyrefly: ignore [missing-import]
 from src.core.config import get_app_settings, settings
+# pyrefly: ignore [missing-import]
 from src.core.redis import is_redis_available, redis_manager
+# pyrefly: ignore [missing-import]
 from src.db.base import init_db
+# pyrefly: ignore [missing-import]
 from src.middleware.llm_middleware import DynamicLLMMiddleware
+# pyrefly: ignore [missing-import]
 from src.middleware.rate_limit_middleware import RateLimitMiddleware
 
 load_dotenv()
@@ -55,8 +64,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Dynamic LLM request overrides are scoped to one request and never leak.
-app.add_middleware(DynamicLLMMiddleware)
+# Request-scoped model/key/base-url overrides are disabled by default. They can
+# be enabled explicitly for a trusted development environment only.
+app.add_middleware(
+    DynamicLLMMiddleware,
+    allow_overrides=settings.LLM_ALLOW_REQUEST_OVERRIDES,
+)
 
 # Rate-limit feature endpoints centrally. The canonical CV router keeps its
 # existing dependency-based limiter so its original contract remains intact.
@@ -159,7 +172,14 @@ app.include_router(cv_router, dependencies=[Depends(check_rate_limit), Depends(v
 
 # The rest of the feature routes use the shared version prefix and inherit the
 # global rate limiter. API-key protection is applied consistently here too.
-for feature_router in (interview_router, matches_router, review_queue_router):
+for feature_router in (
+    interview_router,
+    matches_router,
+    review_queue_router,
+    job_router,
+    roadmap_router,
+    recommendations_router,
+):
     app.include_router(
         feature_router,
         prefix=settings.API_V1_STR,
@@ -179,7 +199,7 @@ async def health_check():
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
-        "active_model": settings.LLM_MODEL,
+        "active_model": settings.llm.model_name,
         "redis": {
             "status": "connected" if is_redis_available() else "unavailable",
             "url": settings.REDIS_URL,
@@ -189,6 +209,8 @@ async def health_check():
             "skill_gap_analysis": "active",
             "interview_coach": "active",
             "review_queue": "active",
+            "job_description_understanding": "active",
+            "personalized_job_recommendations": "active",
         },
     }
 

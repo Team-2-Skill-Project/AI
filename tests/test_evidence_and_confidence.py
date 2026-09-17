@@ -1,3 +1,4 @@
+from __future__ import annotations
 from src.cv_extractor.confidence_scorer import ConfidenceScorer
 from src.models.candidate import EvidenceItem
 from src.models.common import SkillLevel

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pytest
 
 from src.cv_extractor.llm_extractor import LLMExtractor

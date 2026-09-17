@@ -1,5 +1,7 @@
+from __future__ import annotations
 from typing import Generic, TypeVar, Type, Optional, List, Any
 from sqlalchemy.orm import Session
+# pyrefly: ignore [missing-import]
 from src.db.base import Base
 
 ModelType = TypeVar("ModelType", bound=Base)

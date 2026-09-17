@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi import APIRouter, status
 from src.schemas.interview import (
     QuestionGenerationRequest,
@@ -9,6 +10,8 @@ from src.services.interview_service import interview_service
 from src.api.v1.endpoints.matches import router as matches_router
 from src.api.v1.endpoints.review_queue import router as review_queue_router
 from src.api.v1.endpoints.cv import router as cv_router
+from src.api.v1.endpoints.roadmap import router as roadmap_router
+from src.api.v1.endpoints.recommendations import router as recommendations_router
 
 router = APIRouter(prefix="/interview", tags=["Interview Preparation Coach"])
 

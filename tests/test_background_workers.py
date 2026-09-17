@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from src.workers.dispatcher import task_dispatcher

@@ -1,17 +1,19 @@
+from __future__ import annotations
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
-from src.core.llm_service import LLMService
 from src.cv_extractor.pipeline import CVExtractionPipeline
+from src.cv_extractor.llm_extractor import LLMExtractor
 from src.models.candidate import Candidate
 
 
-@patch.object(LLMService, "is_available", return_value=False)
-def test_full_pipeline_with_sample_cv(mock_llm):
+def test_full_pipeline_with_sample_cv():
     sample_path = Path(__file__).parent / "samples" / "sample_ahmed_hassan_cv.txt"
     assert sample_path.exists()
 
-    pipeline = CVExtractionPipeline()
+    offline_llm = MagicMock()
+    offline_llm.is_available.return_value = False
+    pipeline = CVExtractionPipeline(llm_extractor=LLMExtractor(llm=offline_llm))
     candidate = pipeline.extract_from_file(str(sample_path), candidate_id="cand_ahmed_001")
 
     # 1. Verify Candidate Object

@@ -1,9 +1,12 @@
+from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
+# pyrefly: ignore [missing-import]
 from src.db.models.review_queue import ReviewQueueModel
+# pyrefly: ignore [missing-import]
 from src.db.repositories.base import BaseRepository
 
 class ReviewQueueRepository(BaseRepository[ReviewQueueModel]):

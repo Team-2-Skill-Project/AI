@@ -41,7 +41,7 @@ Run the complete test suite with:
 pytest -q
 ```
 
-The merged API includes the canonical CV endpoints plus matching, interview, and review-queue routes. Configure the active provider with `.env` (for example `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_NAME`, `DATABASE_URL`, and `REDIS_URL`) before calling provider-backed features.
+The merged API includes the canonical CV endpoints plus matching, interview, and review-queue routes. Configure the active provider with `.env` (for example `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`, `DATABASE_URL`, and `REDIS_URL`) before calling provider-backed features. New LLM code must use `from src.core.llm import get_llm`.
 
 ---
 
@@ -72,7 +72,7 @@ flowchart TD
     D --> F["Output Parsers → Pydantic Schemas"]
     D --> G["Tools<br/>retrieval · DB lookups · calculators"]
     D --> H["Vector Store<br/>skills · jobs · CV chunks · mentor memory"]
-    D --> I["LLM Provider Adapter<br/>(Strategy Pattern)"]
+    D --> I["Canonical get_llm()<br/>LangChain init_chat_model"]
     D --> J["Postgres + Audit Log"]
 
     style A fill:#4A90D9,color:#fff
@@ -86,7 +86,7 @@ flowchart TD
 
 | Pattern | Where It's Used |
 |---|---|
-| **Strategy** | LLM provider adapter — swap OpenAI / Anthropic / local model without touching business logic |
+| **Canonical Factory** | `get_llm()` resolves the configured provider/model without exposing SDK details to features |
 | **Facade** | Each AI capability exposed as one class (e.g. `CVExtractionFacade`) hiding chain/agent complexity |
 | **Repository** | All DB / vector-store access from AI code — chains never touch the ORM directly |
 | **Chain of Responsibility** | Confidence and fallback handling: extraction → validation → human-review escalation |
@@ -216,17 +216,19 @@ Ranks the job catalog using skills, target role, preferences, match quality, fre
 
 ```mermaid
 flowchart LR
-    R["Retrieval<br/>vector similarity + hard filters"] --> K["Ranking<br/>similarity + match score + freshness + behavior"]
-    K --> X["Explanation<br/>top-page only, micro-chain"]
+    R["Database jobs<br/>active + hard filters"] --> M["Deterministic matching<br/>eligibility gate"]
+    M --> K["Weighted ranking<br/>role + preferences + freshness + behavior"]
+    K --> X["Evidence-based explanation"]
     style R fill:#4A90D9,color:#fff
+    style M fill:#F5A623,color:#000
     style K fill:#F5A623,color:#000
     style X fill:#7B2FF7,color:#fff
 ```
 
-- **Retrieval:** candidate profile embedded once per version → LlamaIndex `VectorStoreIndex` (pgvector/FAISS); pre-filtered by hard constraints at the SQL layer for speed
-- **Ranking:** deterministic blend of similarity, cached match score, freshness, and behavior — kept out of the LLM for latency and cost
-- **Explanation:** the LLM only touches the top page of results → `PydanticOutputParser[RecommendationReasonSchema]`
-- **API:** `GET /jobs/recommended` — cached feed, refreshed on profile change, new ingestion, or schedule
+- **Retrieval:** `DatabaseJobRepository` returns active, non-expired jobs and applies optional work-mode/location filters.
+- **Matching and ranking:** deterministic skill qualification runs before the `0.60/0.15/0.10/0.10/0.05` weighted ranking; invalid matches cannot be rescued by secondary signals.
+- **Explanation:** generated deterministically from matched skills, missing skills, role fit, preferences, freshness, and saved-job evidence.
+- **API:** `GET /api/v1/recommendations/feed` with pagination and `min_score` filtering.
 
 ---
 
@@ -382,7 +384,7 @@ flowchart LR
     style G fill:#2E7D32,color:#fff
 ```
 
-1. Build the shared skeleton first — provider adapter, Pydantic conventions, review-queue repository, background job runner
+1. Build the shared skeleton first — canonical `get_llm()` path, Pydantic conventions, review-queue repository, background job runner
 2. Implement in the dependency order shown above — later features consume earlier ones' persisted output rather than recomputing it
 3. Maintain an evaluation test set (representative CV/job pairs with expected reasoning) from day one — run it on every chain change to catch prompt regressions before the demo
 

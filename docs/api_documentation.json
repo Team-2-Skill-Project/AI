@@ -1,0 +1,690 @@
+{
+  "title": "SkillMatch AI Services API Specification",
+  "version": "1.0.0",
+  "base_url": "http://localhost:8000",
+  "global_headers": {
+    "X-API-Key": "your_api_key_here"
+  },
+  "endpoints": [
+    {
+      "tag": "System Health",
+      "summary": "Health Check",
+      "endpoint": "/health",
+      "method": "GET",
+      "description": "Checks the system status, active LLM model, Redis connection state, and enabled AI service features.",
+      "request_body_json": null,
+      "response_body_json": {
+        "status": "healthy",
+        "service": "SkillMatch AI Services",
+        "version": "1.0.0",
+        "environment": "development",
+        "active_model": "configured-model",
+        "redis": {
+          "status": "connected",
+          "url": "redis://localhost:6379/0"
+        },
+        "features": {
+          "cv_profile_extraction": "active",
+          "skill_gap_analysis": "active",
+          "interview_coach": "active",
+          "review_queue": "active",
+          "job_description_understanding": "active"
+        }
+      }
+    },
+    {
+      "tag": "CV Profile Extraction",
+      "summary": "Extract Structured Profile from CV File (Direct Sync)",
+      "endpoint": "/api/v1/cv/extract-file",
+      "method": "POST",
+      "description": "Upload a digital CV/Resume file (PDF, DOCX, TXT, MD) up to 10MB. Synchronously extracts a normalized candidate profile containing contact info, skills, work experience, education, and projects.",
+      "content_type": "multipart/form-data",
+      "request_form_fields": {
+        "file": "(binary CV file stream: pdf/docx/txt)",
+        "candidate_id": "cand_12345 (optional)"
+      },
+      "request_body_json": null,
+      "response_body_json": {
+        "candidate_id": "cand_12345",
+        "name": "Jane Doe",
+        "email": "jane.doe@example.com",
+        "phone": "+1-555-0199",
+        "summary": "Senior Software Engineer with 6+ years of experience specializing in Python, FastAPI, and Cloud Architecture.",
+        "skills": [
+          {
+            "name": "Python",
+            "category": "Languages",
+            "proficiency": "Advanced",
+            "confidence": 0.95,
+            "source_text": "6 years of Python experience building backend services"
+          },
+          {
+            "name": "FastAPI",
+            "category": "Frameworks",
+            "proficiency": "Advanced",
+            "confidence": 0.92,
+            "source_text": "Built high-throughput REST APIs using FastAPI"
+          }
+        ],
+        "work_experience": [
+          {
+            "role": "Senior Backend Engineer",
+            "company": "Tech Corp",
+            "duration": "2021 - Present",
+            "location": "San Francisco, CA",
+            "description": "Led backend team building microservices and AI pipelines.",
+            "highlights": [
+              "Architected async API layer handling 10M daily requests",
+              "Implemented Redis caching reducing latency by 40%"
+            ]
+          }
+        ],
+        "education": [
+          {
+            "degree": "B.S. in Computer Science",
+            "institution": "University of California",
+            "year": "2018"
+          }
+        ],
+        "projects": [
+          {
+            "name": "AI Matcher Service",
+            "description": "Automated CV parsing and job recommendation engine",
+            "technologies": [
+              "Python",
+              "FastAPI",
+              "PostgreSQL",
+              "LlamaIndex"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "CV Profile Extraction",
+      "summary": "Submit CV File for Async Background Extraction",
+      "endpoint": "/api/v1/cv/extract-file-async",
+      "method": "POST",
+      "description": "Upload a CV file to be processed asynchronously in a non-blocking background task. Returns a pollable job_id.",
+      "content_type": "multipart/form-data",
+      "request_form_fields": {
+        "file": "(binary CV file stream)",
+        "candidate_id": "cand_12345 (optional)"
+      },
+      "request_body_json": null,
+      "response_body_json": {
+        "job_id": "job_cv_a1b2c3d4e5f6",
+        "status": "queued",
+        "result": null,
+        "error": null,
+        "error_code": null
+      }
+    },
+    {
+      "tag": "CV Profile Extraction",
+      "summary": "Poll Background CV Extraction Job Status",
+      "endpoint": "/api/v1/cv/jobs/{job_id}",
+      "method": "GET",
+      "description": "Retrieves current execution status (queued, processing, completed, failed) and candidate profile result once finished.",
+      "request_body_json": null,
+      "response_body_json": {
+        "job_id": "job_cv_a1b2c3d4e5f6",
+        "status": "completed",
+        "result": {
+          "candidate_id": "cand_12345",
+          "name": "Jane Doe",
+          "email": "jane.doe@example.com",
+          "skills": [
+            {
+              "name": "Python",
+              "proficiency": "Advanced"
+            },
+            {
+              "name": "FastAPI",
+              "proficiency": "Advanced"
+            }
+          ]
+        },
+        "error": null,
+        "error_code": null
+      }
+    },
+    {
+      "tag": "CV Profile Extraction",
+      "summary": "Extract Structured Profile from Raw CV Text",
+      "endpoint": "/api/v1/cv/extract-text",
+      "method": "POST",
+      "description": "Extracts candidate profile directly from plain raw CV text payload.",
+      "request_body_json": {
+        "text": "Jane Doe\nEmail: jane@example.com\nSenior Python Developer with 5 years experience in FastAPI, PostgreSQL, and Docker.",
+        "candidate_id": "cand_12345"
+      },
+      "response_body_json": {
+        "candidate_id": "cand_12345",
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "skills": [
+          {
+            "name": "Python",
+            "proficiency": "Advanced"
+          },
+          {
+            "name": "FastAPI",
+            "proficiency": "Intermediate"
+          },
+          {
+            "name": "PostgreSQL",
+            "proficiency": "Intermediate"
+          }
+        ],
+        "work_experience": [],
+        "projects": []
+      }
+    },
+    {
+      "tag": "Job Description Understanding",
+      "summary": "Analyze a Job Description",
+      "endpoint": "/api/v1/jobs/analyze",
+      "method": "POST",
+      "description": "Transforms raw job description text into a structured requirement profile with role family, seniority, required/preferred skills mapped to canonical taxonomy, responsibilities, and constraints.",
+      "request_body_json": {
+        "job_description": "We are seeking a Senior Backend Engineer with 5+ years experience in Python and FastAPI. Strong knowledge of PostgreSQL and Redis required. Experience with Kubernetes is a plus.",
+        "job_id": "550e8400-e29b-41d4-a716-446655440000"
+      },
+      "response_body_json": {
+        "job_id": "550e8400-e29b-41d4-a716-446655440000",
+        "persisted": true,
+        "profile": {
+          "role_family": "Engineering",
+          "seniority": "Senior",
+          "canonical_role": "Backend Engineer",
+          "required_skills": [
+            {
+              "skill_id": "skill_python",
+              "canonical_name": "Python",
+              "category": "Languages",
+              "raw_extracted": "Python",
+              "importance": "critical",
+              "required_level": "advanced"
+            },
+            {
+              "skill_id": "skill_fastapi",
+              "canonical_name": "FastAPI",
+              "category": "Frameworks",
+              "raw_extracted": "FastAPI",
+              "importance": "critical",
+              "required_level": "intermediate"
+            }
+          ],
+          "preferred_skills": [
+            {
+              "skill_id": "skill_k8s",
+              "canonical_name": "Kubernetes",
+              "category": "DevOps",
+              "raw_extracted": "Kubernetes",
+              "importance": "nice_to_have",
+              "required_level": null
+            }
+          ],
+          "responsibilities": [
+            "Build scalable backend services",
+            "Maintain relational databases and caches"
+          ],
+          "min_years_experience": 5,
+          "max_years_experience": null,
+          "constraints": [],
+          "extraction_confidence": 0.95
+        }
+      }
+    },
+    {
+      "tag": "Interview Preparation Coach",
+      "summary": "Generate Tailored Interview Questions",
+      "endpoint": "/api/v1/interview/generate",
+      "method": "POST",
+      "description": "Generates a customized set of technical, behavioral, and system design interview questions targeting candidate skill gaps for a specific job role.",
+      "request_body_json": {
+        "job_id": "job_9988",
+        "target_role": "Senior Backend Engineer",
+        "candidate_id": "cand_12345",
+        "focus_skills": [
+          "skill_redis",
+          "skill_system_design"
+        ],
+        "job_summary": "High-load microservice development with Redis caching and asynchronous queues.",
+        "include_essay": true
+      },
+      "response_body_json": {
+        "job_id": "job_9988",
+        "target_role": "Senior Backend Engineer",
+        "questions": [
+          {
+            "question_id": "q_001",
+            "skill_id": "skill_redis",
+            "type": "technical",
+            "question": "How would you handle cache stampede and thundering herd problems in Redis when key TTL expires under high traffic?",
+            "context_or_scenario": "High concurrency user session lookup service",
+            "key_points_to_cover": [
+              "Mutex locking / Probabilistic early expiration",
+              "Cache warming techniques",
+              "Background worker refreshes"
+            ],
+            "security_focus_areas": [
+              "Redis Authentication",
+              "TLS in transit"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "Interview Preparation Coach",
+      "summary": "Evaluate Interview Answer",
+      "endpoint": "/api/v1/interview/evaluate",
+      "method": "POST",
+      "description": "Evaluates a candidate's answer to an interview question, providing a score (1-10), strengths, improvements, ideal answer outline, and security vulnerability assessment.",
+      "request_body_json": {
+        "question_id": "q_001",
+        "question_text": "How would you handle cache stampede in Redis?",
+        "question_type": "technical",
+        "skill_id": "skill_redis",
+        "user_answer": "I would use a distributed lock using Redis SETNX with a short expiry so only one request regenerates the cache while others wait or return stale data."
+      },
+      "response_body_json": {
+        "question_id": "q_001",
+        "score": 9,
+        "strengths": [
+          "Correctly identified SETNX distributed lock pattern",
+          "Included expiry mechanism to prevent infinite lock hold"
+        ],
+        "improvements": [
+          "Could mention XADD / Redlock for multi-node deployments"
+        ],
+        "ideal_answer_outline": "1. Explain stampede concept\n2. Mutex locking via SETNX/Redlock\n3. Stale-while-revalidate pattern",
+        "security_assessment": {
+          "has_security_vulnerabilities": false,
+          "identified_risks": [],
+          "security_score": 9,
+          "mitigation_suggestions": [
+            "Ensure lock keys use unique UUID values to prevent unauthorized unlock"
+          ]
+        },
+        "recommended_action": "Proceed to next system design question"
+      }
+    },
+    {
+      "tag": "Skill Gap Analysis & Explainable Match",
+      "summary": "Perform Automated Skill Gap & Explainable Match Analysis",
+      "endpoint": "/api/v1/matches/analyze",
+      "method": "POST",
+      "description": "Evaluates candidate against job requirements. Calculates overall match score (0-100), identifies missing critical skills, weak skills, blockers, qualification status (Qualified, Partially Qualified, Not Qualified), and outputs prioritized upskilling path. (Aliases: /skill-gap, /evaluate-gap, /explain)",
+      "request_body_json": {
+        "job_id": "job_9988",
+        "candidate_id": "cand_12345",
+        "job_requirements": {
+          "role_title": "Senior Backend Engineer",
+          "required_skills": [
+            "Python",
+            "FastAPI",
+            "PostgreSQL",
+            "Docker"
+          ]
+        },
+        "candidate_profile": {
+          "candidate_id": "cand_12345",
+          "name": "Jane Doe",
+          "skills": [
+            "Python",
+            "FastAPI",
+            "SQL"
+          ],
+          "work_history": [
+            {
+              "role": "Backend Engineer",
+              "company": "DataCorp",
+              "duration": "3 years",
+              "description": "Developed Python services with PostgreSQL."
+            }
+          ]
+        }
+      },
+      "response_body_json": {
+        "job_id": "job_9988",
+        "candidate_id": "cand_12345",
+        "overall_match_score": 82.5,
+        "qualification_status": "Qualified",
+        "full_candidate_summary": "Jane is a strong fit with direct experience in Python and FastAPI. Docker is missing from active evidence.",
+        "skill_breakdown": [
+          {
+            "skill_name": "Python",
+            "required_proficiency": "Advanced",
+            "candidate_proficiency": "Advanced",
+            "match_score": 100.0,
+            "is_matched": true,
+            "skill_feedback": "Strong Python experience demonstrated in 3 years of work history.",
+            "evidence_found": "Developed Python services at DataCorp"
+          },
+          {
+            "skill_name": "Docker",
+            "required_proficiency": "Intermediate",
+            "candidate_proficiency": "Missing",
+            "match_score": 0.0,
+            "is_matched": false,
+            "skill_feedback": "No direct containerization or Docker experience found.",
+            "evidence_found": "None"
+          }
+        ],
+        "missing_critical_skills": [
+          "Docker"
+        ],
+        "weak_skills": [],
+        "blockers": [],
+        "nice_to_have_gaps": [],
+        "priority": "low",
+        "rationale": "High overall score above 80 threshold despite missing Docker.",
+        "recommended_upskilling_path": [
+          "Complete Docker & Containerization fundamentals course",
+          "Deploy sample FastAPI app with Docker Compose"
+        ]
+      }
+    },
+    {
+      "tag": "Skill Gap Analysis & Explainable Match",
+      "summary": "Retrieve Persisted Match Explanation",
+      "endpoint": "/api/v1/matches/{job_id}/candidate/{candidate_id}",
+      "method": "GET",
+      "description": "Fetches the latest stored explainable match evaluation between a specific job and candidate.",
+      "request_body_json": null,
+      "response_body_json": {
+        "id": "match_rec_1001",
+        "job_id": "job_9988",
+        "candidate_id": "cand_12345",
+        "overall_match_score": 82.5,
+        "qualification_status": "Qualified",
+        "created_at": "2026-09-13T10:00:00Z"
+      }
+    },
+    {
+      "tag": "Skill Gap Analysis & Explainable Match",
+      "summary": "List Match Explanations for Candidate",
+      "endpoint": "/api/v1/matches/candidate/{candidate_id}",
+      "method": "GET",
+      "description": "Lists all stored explainable match records for a given candidate with pagination (skip, limit).",
+      "request_body_json": null,
+      "response_body_json": [
+        {
+          "id": "match_rec_1001",
+          "job_id": "job_9988",
+          "candidate_id": "cand_12345",
+          "overall_match_score": 82.5,
+          "qualification_status": "Qualified",
+          "created_at": "2026-09-13T10:00:00Z"
+        }
+      ]
+    },
+    {
+      "tag": "Personalized Job Recommendations",
+      "summary": "Get Personalized Job Recommendation Feed",
+      "endpoint": "/api/v1/recommendations/feed",
+      "method": "GET",
+      "description": "Returns deterministic, eligibility-filtered job recommendations ranked by match, role, preferences, freshness, and behavior.",
+      "query_parameters": {
+        "candidate_id": "cand_001 (optional)",
+        "page": "1-indexed page number (optional, minimum 1)",
+        "limit": "Results per page (optional, 1-50)",
+        "work_mode": "remote, hybrid, or onsite (optional)",
+        "location": "Location substring (optional)",
+        "min_score": "Final score cutoff from 0 to 100 (optional)"
+      },
+      "request_body_json": null,
+      "response_body_json": {
+        "candidate_id": "cand_001",
+        "total_results": 0,
+        "page": 1,
+        "limit": 20,
+        "has_more": false,
+        "generated_at": "2026-09-17T10:00:00Z",
+        "recommendations": []
+      }
+    },
+    {
+      "tag": "Shared Review Queue",
+      "summary": "List Review Queue Items",
+      "endpoint": "/api/v1/review-queue/",
+      "method": "GET",
+      "description": "Returns paginated and filtered items awaiting human recruiter review (status, item_type, priority).",
+      "request_body_json": null,
+      "response_body_json": {
+        "items": [
+          {
+            "id": "rev_item_001",
+            "item_type": "match_analysis",
+            "target_id": "job_9988",
+            "status": "pending",
+            "priority": "medium",
+            "flagged_reasons": [
+              "Confidence score below 0.70 threshold"
+            ],
+            "payload": {
+              "candidate_id": "cand_12345",
+              "job_id": "job_9988",
+              "score": 68.0
+            },
+            "reviewer_id": null,
+            "reviewer_notes": null,
+            "resolution": null,
+            "created_at": "2026-09-13T09:30:00Z"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "tag": "Shared Review Queue",
+      "summary": "Get Single Review Queue Item",
+      "endpoint": "/api/v1/review-queue/{item_id}",
+      "method": "GET",
+      "description": "Fetches detailed review queue item by ID.",
+      "request_body_json": null,
+      "response_body_json": {
+        "id": "rev_item_001",
+        "item_type": "match_analysis",
+        "target_id": "job_9988",
+        "status": "pending",
+        "priority": "medium",
+        "flagged_reasons": [
+          "Confidence score below 0.70 threshold"
+        ],
+        "payload": {
+          "candidate_id": "cand_12345",
+          "job_id": "job_9988",
+          "score": 68.0
+        },
+        "reviewer_id": null,
+        "reviewer_notes": null,
+        "resolution": null,
+        "created_at": "2026-09-13T09:30:00Z"
+      }
+    },
+    {
+      "tag": "Shared Review Queue",
+      "summary": "Claim Item for Review",
+      "endpoint": "/api/v1/review-queue/{item_id}/claim",
+      "method": "POST",
+      "description": "Claims a review queue item for a specific human reviewer, updating status to 'in_review'.",
+      "request_body_json": {
+        "reviewer_id": "rev_agent_07"
+      },
+      "response_body_json": {
+        "id": "rev_item_001",
+        "item_type": "match_analysis",
+        "target_id": "job_9988",
+        "status": "in_review",
+        "priority": "medium",
+        "reviewer_id": "rev_agent_07",
+        "updated_at": "2026-09-13T10:05:00Z"
+      }
+    },
+    {
+      "tag": "Shared Review Queue",
+      "summary": "Resolve Review Item",
+      "endpoint": "/api/v1/review-queue/{item_id}/resolve",
+      "method": "POST",
+      "description": "Resolves a review item with final status (approved, rejected, escalated) and optional score or qualification overrides.",
+      "request_body_json": {
+        "status": "approved",
+        "reviewer_id": "rev_agent_07",
+        "reviewer_notes": "Verified candidate Github repository; Docker skills confirmed.",
+        "adjusted_score": 85.0,
+        "adjusted_qualification_status": "Qualified",
+        "resolution_metadata": {
+          "synced_to_laravel": true
+        }
+      },
+      "response_body_json": {
+        "id": "rev_item_001",
+        "item_type": "match_analysis",
+        "target_id": "job_9988",
+        "status": "approved",
+        "priority": "medium",
+        "reviewer_id": "rev_agent_07",
+        "reviewer_notes": "Verified candidate Github repository; Docker skills confirmed.",
+        "resolution": {
+          "status": "approved",
+          "adjusted_score": 85.0,
+          "adjusted_qualification_status": "Qualified"
+        },
+        "reviewed_at": "2026-09-13T10:10:00Z"
+      }
+    },
+    {
+      "tag": "Dynamic Career Roadmap",
+      "summary": "Generate Dynamic Career Roadmap",
+      "endpoint": "/api/v1/roadmap/generate",
+      "method": "POST",
+      "description": "Converts candidate skill gaps and target role metadata into a sequenced, multi-phase learning roadmap with milestones, weekly tasks, and cited gap grounding.",
+      "request_body_json": {
+        "candidate_id": "cand_12345",
+        "target_role": "Senior Backend Engineer",
+        "role_family": "Engineering",
+        "skill_gaps": [
+          "Docker",
+          "Kubernetes",
+          "Redis"
+        ]
+      },
+      "response_body_json": {
+        "roadmap_id": "rm_a1b2c3d4e5f6",
+        "candidate_id": "cand_12345",
+        "target_role": "Senior Backend Engineer",
+        "role_family": "Engineering",
+        "total_weeks": 6,
+        "phases": [
+          {
+            "phase_id": "phase_1",
+            "title": "Phase 1: Docker Skill Acquisition",
+            "order": 1,
+            "cited_gap": "Docker",
+            "rationale": "Sequential priority phase focused on closing critical Docker gap.",
+            "milestones": [
+              {
+                "milestone_id": "m_1_1",
+                "title": "Master Fundamentals of Docker",
+                "target_week": 1,
+                "status": "not_started",
+                "tasks": [
+                  {
+                    "task_id": "task_1_1_1",
+                    "title": "Study core documentation for Docker",
+                    "description": "Understand container isolation and Dockerfile syntax.",
+                    "estimated_hours": 3.0,
+                    "status": "not_started",
+                    "cited_gap": "Docker",
+                    "resource_links": [
+                      "https://docs.docker.com"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "created_at": "2026-09-13T12:00:00Z",
+        "updated_at": "2026-09-13T12:00:00Z"
+      }
+    },
+    {
+      "tag": "Dynamic Career Roadmap",
+      "summary": "Get Active Candidate Roadmap",
+      "endpoint": "/api/v1/roadmap/{candidate_id}",
+      "method": "GET",
+      "description": "Fetches the current active dynamic career roadmap for a given candidate ID.",
+      "request_body_json": null,
+      "response_body_json": {
+        "roadmap_id": "rm_a1b2c3d4e5f6",
+        "candidate_id": "cand_12345",
+        "target_role": "Senior Backend Engineer",
+        "role_family": "Engineering",
+        "total_weeks": 6,
+        "phases": []
+      }
+    },
+    {
+      "tag": "Dynamic Career Roadmap",
+      "summary": "Update Roadmap Task Progress",
+      "endpoint": "/api/v1/roadmap/tasks/{task_id}/complete",
+      "method": "POST",
+      "description": "Updates status (not_started, in_progress, completed) of a specific roadmap task and recalculates parent milestone progress.",
+      "request_body_json": {
+        "candidate_id": "cand_12345",
+        "task_id": "task_1_1_1",
+        "status": "completed"
+      },
+      "response_body_json": {
+        "roadmap_id": "rm_a1b2c3d4e5f6",
+        "candidate_id": "cand_12345",
+        "phases": [
+          {
+            "phase_id": "phase_1",
+            "milestones": [
+              {
+                "milestone_id": "m_1_1",
+                "status": "completed",
+                "tasks": [
+                  {
+                    "task_id": "task_1_1_1",
+                    "status": "completed"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "Dynamic Career Roadmap",
+      "summary": "Refresh Dynamic Roadmap Priorities",
+      "endpoint": "/api/v1/roadmap/refresh",
+      "method": "POST",
+      "description": "Recomputes roadmap priorities for new skill gaps or target role changes while preserving completed milestones.",
+      "request_body_json": {
+        "candidate_id": "cand_12345",
+        "new_skill_gaps": [
+          "Kubernetes Security"
+        ]
+      },
+      "response_body_json": {
+        "roadmap_id": "rm_a1b2c3d4e5f6",
+        "candidate_id": "cand_12345",
+        "target_role": "Senior Backend Engineer",
+        "phases": [
+          {
+            "phase_id": "phase_1",
+            "cited_gap": "Kubernetes Security"
+          }
+        ]
+      }
+    }
+  ]
+}

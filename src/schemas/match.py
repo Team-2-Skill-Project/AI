@@ -1,3 +1,4 @@
+from __future__ import annotations
 from enum import Enum
 from typing import Optional, List, Union, Literal, Any, Dict
 from pydantic import BaseModel, Field, field_validator
@@ -58,6 +59,8 @@ class SkillGapAnalysisRequest(BaseModel):
         description="Candidate's listed skills, project experience, and work history"
     )
 
+from src.schemas.roadmap import ResourceLinkSchema
+
 class SkillMatchItem(BaseModel):
     skill_name: str = Field(description="Name of the evaluated skill")
     required_proficiency: str = Field(description="Proficiency level requested in the job description")
@@ -70,6 +73,7 @@ class SkillMatchItem(BaseModel):
     is_matched: bool = Field(description="True if match_score >= 70, False otherwise")
     skill_feedback: str = Field(description="Concise, constructive feedback tailored to this skill")
     evidence_found: str = Field(description="Concrete evidence from projects, CV, or work history supporting evaluation")
+    resources: List[ResourceLinkSchema] = Field(default=[], description="Suggested learning resources if there is a gap")
 
     @field_validator("is_matched", mode="before")
     @classmethod

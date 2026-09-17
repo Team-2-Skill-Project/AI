@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from src.middleware.llm_middleware import DynamicLLMMiddleware, get_llm_context

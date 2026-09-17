@@ -84,5 +84,18 @@
   
   {"skill_id": "skill_communication", "canonical_name": "Effective Communication", "category": "Soft Skills", "aliases": ["Written & Verbal Communication", "Communication"]},
   {"skill_id": "skill_problem_solving", "canonical_name": "Problem Solving", "category": "Soft Skills", "aliases": ["Analytical Thinking", "Algorithmic Efficiency"]},
-  {"skill_id": "skill_teamwork", "canonical_name": "Teamwork & Collaboration", "category": "Soft Skills", "aliases": ["Cross-functional Collaboration", "Teamwork"]}
+  {"skill_id": "skill_teamwork", "canonical_name": "Teamwork & Collaboration", "category": "Soft Skills", "aliases": ["Cross-functional Collaboration", "Teamwork"]},
+
+  {"skill_id": "skill_kubernetes", "canonical_name": "Kubernetes", "category": "DevOps", "aliases": ["k8s", "K8s", "K8S", "Kubernetes Cluster"]},
+  {"skill_id": "skill_celery", "canonical_name": "Celery", "category": "Tools", "aliases": ["Celery Task Queue", "Celery Distributed Queue"]},
+  {"skill_id": "skill_graphql", "canonical_name": "GraphQL", "category": "Web Development", "aliases": ["GraphQL API", "GraphQL APIs"]},
+  {"skill_id": "skill_dbt", "canonical_name": "dbt", "category": "Data Science", "aliases": ["data build tool", "dbt core"]},
+  {"skill_id": "skill_bigquery", "canonical_name": "Google BigQuery", "category": "Big Data", "aliases": ["BigQuery", "Big Query"]},
+  {"skill_id": "skill_snowflake", "canonical_name": "Snowflake", "category": "Databases", "aliases": ["Snowflake DW", "Snowflake Data Warehouse"]},
+  {"skill_id": "skill_dart", "canonical_name": "Dart", "category": "Programming Languages", "aliases": ["Dart lang", "Dart programming"]},
+  {"skill_id": "skill_flutter", "canonical_name": "Flutter", "category": "Frameworks", "aliases": ["Flutter framework", "Flutter SDK"]},
+  {"skill_id": "skill_firebase", "canonical_name": "Firebase", "category": "Cloud", "aliases": ["Google Firebase", "Firestore", "FCM"]},
+  {"skill_id": "skill_bloc", "canonical_name": "BLoC", "category": "Frameworks", "aliases": ["BLoC Pattern", "Flutter BLoC"]},
+  {"skill_id": "skill_seo", "canonical_name": "Search Engine Optimization", "category": "Digital Marketing", "aliases": ["SEO", "Technical SEO", "On-Page SEO", "Off-Page SEO"]},
+  {"skill_id": "skill_content_strategy", "canonical_name": "Content Strategy", "category": "Digital Marketing", "aliases": ["Content Marketing", "Content Planning"]}
 ]

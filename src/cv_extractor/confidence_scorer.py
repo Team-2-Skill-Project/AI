@@ -1,3 +1,4 @@
+from __future__ import annotations
 from ..models.candidate import EvidenceItem
 from ..models.common import SkillLevel
 

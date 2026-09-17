@@ -1,3 +1,5 @@
+from __future__ import annotations
+from datetime import datetime
 from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 
@@ -31,11 +33,27 @@ class SkillRequirement(BaseModel):
 class JobPosting(BaseModel):
     job_id: str = Field(description="Unique identifier for the job position")
     title: str = Field(default="", description="Job title / role designation")
+    company: Optional[str] = Field(default=None, description="Hiring organization / company name")
+    role: Optional[str] = Field(default=None, description="Raw role or title designation")
+    canonical_role: Optional[str] = Field(default=None, description="Taxonomy normalized role title")
+    role_family: Optional[str] = Field(default=None, description="High-level role family (e.g. Engineering, Data & AI)")
     description: Optional[str] = Field(default=None, description="Full job description")
     department: Optional[str] = Field(default=None, description="Department or business team")
-    location: Optional[str] = Field(default=None, description="Work location / remote setup")
+    location: Optional[str] = Field(default=None, description="Work location / city")
+    work_mode: Optional[str] = Field(default="remote", description="remote, hybrid, or onsite")
+    employment_type: Optional[str] = Field(default="full_time", description="full_time, part_time, contract, internship")
     experience_level: Optional[str] = Field(default=None, description="Entry, Mid, Senior, Lead")
     min_years_experience: Optional[float] = Field(default=None, description="Minimum total years of professional experience")
+    posted_at: Optional[Union[datetime, str]] = Field(default=None, description="Posting creation timestamp")
+    expires_at: Optional[Union[datetime, str]] = Field(default=None, description="Posting expiration timestamp")
+    is_active: bool = Field(default=True, description="Whether the job posting is active")
+    source_url: Optional[str] = Field(default=None, description="Original source listing URL")
+    salary: Optional[str] = Field(default=None, description="Raw salary text when supplied by the source")
+    source: Optional[str] = Field(default=None, description="Source provider attribution")
+    source_external_id: Optional[str] = Field(default=None, description="Identifier assigned by the source provider")
+    source_updated_at: Optional[Union[datetime, str]] = Field(default=None, description="Source update timestamp")
+    ingested_at: Optional[Union[datetime, str]] = Field(default=None, description="Timestamp when the source record was ingested")
+    description_is_partial: bool = Field(default=False, description="Whether description is only a source snippet")
     required_skills: List[SkillRequirement] = Field(default=[], description="List of required technical and domain skills")
 
 class JobRequirementsPayload(BaseModel):

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from typing import Optional, List, Dict, Any, Union, Set
 from src.ai.chains.match_explanation import MatchExplanationChain
@@ -149,6 +150,150 @@ class MatchingService:
         response.missing_critical_skills = missing_critical
 
         return response
+
+    def evaluate_match(
+        self,
+        candidate_profile: Any,
+        job_requirements: Any,
+        job_id: str = "job_default",
+        candidate_id: str = "cand_default",
+        taxonomy_manager: Optional[Any] = None,
+    ) -> SkillGapAnalysisResponse:
+        """
+        Fast, deterministic skill gap analysis for a candidate profile against job requirements.
+        Reuses normalize_job_requirements(), canonical taxonomy skill mapping, and
+        apply_evaluation_rules() without making an external LLM call.
+        """
+        from src.taxonomy.taxonomy_manager import TaxonomyManager
+        taxonomy = taxonomy_manager or TaxonomyManager()
+
+        parsed_reqs = self.normalize_job_requirements(job_requirements)
+
+        # Extract candidate skills into a structured map: skill_id / clean_name -> candidate_skill
+        cand_skills_map: Dict[str, Dict[str, Any]] = {}
+        cand_id_str = candidate_id
+
+        # Determine skills container from candidate_profile
+        skills_list = []
+        if hasattr(candidate_profile, "skills"):
+            skills_list = candidate_profile.skills
+            if hasattr(candidate_profile, "candidate_id") and candidate_profile.candidate_id:
+                cand_id_str = candidate_profile.candidate_id
+        elif isinstance(candidate_profile, dict):
+            skills_list = candidate_profile.get("skills", [])
+            cand_id_str = candidate_profile.get("candidate_id", candidate_id)
+
+        for s in skills_list:
+            s_name = ""
+            s_level = "intermediate"
+            s_id = None
+            s_evidence = ""
+
+            if isinstance(s, str):
+                s_name = s
+            elif isinstance(s, dict):
+                s_name = s.get("name") or s.get("skill_name") or ""
+                s_level = str(s.get("level") or s.get("proficiency") or "intermediate").lower()
+                s_id = s.get("skill_id")
+                evidence_items = s.get("evidence", [])
+                if isinstance(evidence_items, list) and evidence_items:
+                    s_evidence = str(evidence_items[0].get("text") if isinstance(evidence_items[0], dict) else evidence_items[0])
+            elif hasattr(s, "name") or hasattr(s, "skill_name"):
+                s_name = getattr(s, "name", None) or getattr(s, "skill_name", "")
+                lvl = getattr(s, "level", None) or getattr(s, "proficiency", "intermediate")
+                s_level = getattr(lvl, "value", str(lvl)).lower()
+                s_id = getattr(s, "skill_id", None)
+                ev = getattr(s, "evidence", [])
+                if isinstance(ev, list) and ev:
+                    s_evidence = getattr(ev[0], "text", str(ev[0]))
+
+            if not s_name and not s_id:
+                continue
+
+            # Normalize candidate skill to canonical ID
+            canonical_id = s_id
+            if not canonical_id and s_name:
+                canonical_id, _, _ = taxonomy.normalize_skill(s_name, strict=True)
+
+            entry = {
+                "name": s_name,
+                "canonical_id": canonical_id,
+                "level": s_level,
+                "evidence": s_evidence or f"Extracted {s_name} with {s_level} proficiency."
+            }
+
+            if canonical_id:
+                cand_skills_map[canonical_id.lower()] = entry
+            if s_name:
+                cand_skills_map[s_name.lower().strip()] = entry
+
+        # Build skill breakdown items
+        skill_breakdown_items: List[SkillMatchItem] = []
+
+        for req in parsed_reqs:
+            req_name = req.skill_name
+            req_canonical_id, _, _ = taxonomy.normalize_skill(req_name, strict=True)
+
+            # Check if candidate has matching skill
+            matched_entry = None
+            if req_canonical_id and req_canonical_id.lower() in cand_skills_map:
+                matched_entry = cand_skills_map[req_canonical_id.lower()]
+            elif req_name.lower().strip() in cand_skills_map:
+                matched_entry = cand_skills_map[req_name.lower().strip()]
+
+            if matched_entry:
+                cand_lvl = matched_entry["level"].lower()
+                req_prof = (req.proficiency or "intermediate").lower()
+
+                cand_rank = {"expert": 4, "advanced": 3, "intermediate": 2, "mid": 2, "beginner": 1, "basic": 1, "entry": 1}.get(cand_lvl, 2)
+                req_rank = {"expert": 4, "advanced": 3, "intermediate": 2, "mid": 2, "beginner": 1, "basic": 1, "entry": 1}.get(req_prof, 2)
+
+                if cand_rank >= req_rank:
+                    score = 100.0
+                elif cand_rank == req_rank - 1:
+                    score = 75.0
+                elif cand_rank == req_rank - 2:
+                    score = 50.0
+                else:
+                    score = 30.0
+
+                cand_prof_str = cand_lvl.title()
+                is_matched = score >= 70.0
+                feedback = f"Matches requirement for {req_name}." if is_matched else f"Basic proficiency in {req_name}."
+                evidence = matched_entry.get("evidence") or f"Demonstrated background in {req_name}."
+            else:
+                score = 0.0
+                cand_prof_str = "Missing"
+                is_matched = False
+                feedback = f"Missing required skill: {req_name}."
+                evidence = "No matching evidence found in candidate profile."
+
+            skill_breakdown_items.append(
+                SkillMatchItem(
+                    skill_name=req_name,
+                    required_proficiency=req.proficiency or "Intermediate",
+                    candidate_proficiency=cand_prof_str,
+                    match_score=score,
+                    is_matched=is_matched,
+                    skill_feedback=feedback,
+                    evidence_found=evidence,
+                )
+            )
+
+        # Construct raw response object
+        raw_response = SkillGapAnalysisResponse(
+            job_id=job_id,
+            candidate_id=cand_id_str,
+            overall_match_score=0.0,
+            qualification_status=QualificationStatus.NOT_QUALIFIED.value,
+            full_candidate_summary="Deterministic qualification assessment based on skill requirements and evidence.",
+            skill_breakdown=skill_breakdown_items,
+            missing_critical_skills=[],
+            recommended_upskilling_path=[],
+        )
+
+        # Apply standard qualification and threshold rules
+        return self.apply_evaluation_rules(raw_response, parsed_reqs)
 
     async def analyze_skill_gap(
         self,

@@ -1,8 +1,10 @@
+from __future__ import annotations
 import logging
 import re
 from typing import Any
 
-from src.core.llm_service import LLMService, get_llm_service
+from src.core.config import settings
+from src.core.llm import get_llm, parse_json_response
 from src.models import CVExtractionSchema
 from src.taxonomy.taxonomy_manager import STOPWORDS_BLACKLIST
 
@@ -14,7 +16,7 @@ logger = logging.getLogger(__name__)
 class LLMExtractor:
     """
     Candidate Profile & Entity Extractor.
-    Delegates contextual LLM inference to the centralized LLMService,
+    Delegates contextual LLM inference to the canonical get_llm() path,
     with an intelligent rule-based heuristic parser when LLM is unavailable.
     Strictly validates outputs with Pydantic CVExtractionSchema.
     """
@@ -79,8 +81,26 @@ IMPORTANT INSTRUCTIONS:
 5. Return ONLY a valid JSON object. DO NOT wrap with markdown backticks (```json).
 """
 
-    def __init__(self, llm_service: LLMService | None = None):
-        self.llm_service = llm_service or get_llm_service()
+    def __init__(self, llm=None):
+        # An injected object is test-only; production construction uses get_llm.
+        self.llm = llm
+
+    def _llm_available(self) -> bool:
+        if self.llm is not None and hasattr(self.llm, "is_available"):
+            return bool(self.llm.is_available())
+        if self.llm is not None:
+            return True
+        llm_settings = settings.get_llm_settings()
+        return bool(llm_settings.api_key) or bool(llm_settings.base_url)
+
+    def _generate_json(self, prompt: str, system_prompt: str):
+        if self.llm is not None and hasattr(self.llm, "generate_json"):
+            return self.llm.generate_json(prompt=prompt, system_prompt=system_prompt)
+        if self.llm is None:
+            self.llm = get_llm()
+        messages = [("system", system_prompt), ("user", prompt)]
+        response = self.llm.invoke(messages)
+        return parse_json_response(str(getattr(response, "content", response)))
 
     def extract_entities(
         self,
@@ -89,14 +109,14 @@ IMPORTANT INSTRUCTIONS:
         document_urls: list[str] | None = None
     ) -> dict[str, Any]:
         """
-        Extracts structured entities from CV text using the centralized LLMService if available,
+        Extracts structured entities from the canonical LLM if available,
         or intelligent heuristic extraction otherwise.
         Strictly validates and coerces outputs using Pydantic CVExtractionSchema.
         """
-        if self.llm_service.is_available():
+        if self._llm_available():
             try:
                 prompt = f"RESUME TEXT:\n{full_text[:12000]}"
-                raw_result = self.llm_service.generate_json(
+                raw_result = self._generate_json(
                     prompt=prompt,
                     system_prompt=self.SYSTEM_PROMPT
                 )

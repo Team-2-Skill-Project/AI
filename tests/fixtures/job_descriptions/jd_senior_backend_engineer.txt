@@ -1,0 +1,37 @@
+Senior Backend Engineer — SkillMatch Platform (Remote / Cairo, Egypt)
+
+About the Role
+We are looking for a Senior Backend Engineer to join our core platform team. You will
+design and build the APIs, data pipelines, and infrastructure that power our AI-driven
+job-matching service for hundreds of thousands of users.
+
+Requirements (Must Have)
+- 5+ years of professional backend engineering experience
+- Strong proficiency in Python (FastAPI or Django)
+- Deep expertise in PostgreSQL and query optimization
+- Experience designing RESTful APIs at scale
+- Solid understanding of Docker and containerized deployment
+- Proficiency in Redis for caching and async task queues
+- Strong knowledge of Git and CI/CD pipelines
+
+Nice to Have
+- Familiarity with Kubernetes and Helm charts
+- Exposure to Celery for distributed task processing
+- Experience with AWS or GCP cloud services
+- Knowledge of GraphQL
+
+Responsibilities
+- Design and implement high-performance backend APIs using FastAPI
+- Lead code reviews and enforce engineering best practices across the team
+- Optimize database schemas and queries for throughput and latency
+- Collaborate with ML engineers to integrate AI models into the platform
+- Write comprehensive unit and integration tests
+
+Experience
+The ideal candidate has 5-8 years of hands-on backend engineering experience in
+production systems handling millions of requests per day.
+
+Location & Constraints
+- Position is remote-first with optional office access in Cairo, Egypt
+- Must have a valid work permit if located outside Egypt
+- Fluent English is required for daily communication with international stakeholders

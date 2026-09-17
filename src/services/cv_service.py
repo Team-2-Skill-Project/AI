@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 from typing import Optional
 from functools import lru_cache
@@ -7,7 +8,6 @@ from src.cv_extractor.pipeline import CVExtractionPipeline
 from src.taxonomy.taxonomy_manager import TaxonomyManager
 from src.cv_extractor.document_loader import DocumentLoader
 from src.cv_extractor.llm_extractor import LLMExtractor
-from src.core.llm_service import get_llm_service
 from src.core.config import get_app_settings
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,7 @@ class CVService:
             app_settings = get_app_settings()
             taxonomy = TaxonomyManager(seed_file_path=app_settings.taxonomy_path)
             loader = DocumentLoader()
-            llm_service = get_llm_service()
-            extractor = LLMExtractor(llm_service=llm_service)
+            extractor = LLMExtractor()
             self.pipeline = CVExtractionPipeline(
                 taxonomy_manager=taxonomy,
                 document_loader=loader,

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 import re
 
@@ -18,11 +19,10 @@ class TextCleaner:
             r"^(?:educational\s+|academic\s+)?(?:education|background|history|qualifications?|studies|degrees?|schooling|credentials?|records?|training)(?:\s+(?:and\s+training|and\s+qualifications|background|history|qualifications?|credentials?|records?))?$"
         ),
         "experience": (
-            r"^(?:(?:work|professional|employment|career|job|industry|practical|relevant|internship)\s+(?:and\s+|&\s+)?(?:internships?|employment|work|experience)?\s*)?(?:experience|experiences|history|background|employment|internships?|work\s+history)$"
             r"^(?:(?:work|professional|employment|career|job|industry|practical|relevant|internship|customer\s+service|research|teaching|leadership)\s+(?:and\s+|&\s+)?(?:internships?|employment|work|experience)?\s*)?(?:experience|experiences|history|background|employment|internships?|work\s+history)$"
         ),
         "projects": (
-            r"^(?:key\s+|selected\s+|personal\s+|academic\s+|technical\s+|software\s+|engineering\s+|featured\s+|major\s+|recent\s+|relevant\s+|capstone\s+|open\s+source\s+|coursework\s+|github\s+)?(?:projects?|portfolio|project\s+work|project\s+experience)$"
+            r"^(?:key\s+|selected\s+|live\s+|personal\s+|academic\s+|technical\s+|software\s+|engineering\s+|featured\s+|major\s+|recent\s+|relevant\s+|capstone\s+|open\s+source\s+|coursework\s+|github\s+|(?:selected\s+)?(?:ai|research)\s*(?:and|&)\s*(?:ai|research)\s+)?(?:projects?|portfolio|project\s+work|project\s+experience)$"
         ),
         "skills": (
             r"^(?:technical\s+|core\s+|key\s+|professional\s+|programming\s+|software\s+|computer\s+|it\s+|developer\s+)?(?:skills?|technologies|tech\s+stack|technology\s+stack|competencies|expertise|proficiencies|tools?|languages\s+and\s+(?:frameworks|technologies|tools)|specializations)(?:\s+(?:and\s+|&\s+)(?:competencies|tools?|technologies|abilities|frameworks|(?:tech\s+)?stack))?$"

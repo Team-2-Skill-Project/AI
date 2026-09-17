@@ -1,6 +1,9 @@
+from __future__ import annotations
 import uuid
 from typing import Optional
+# pyrefly: ignore [missing-import]
 from src.ai.chains.interview_coach import InterviewCoachChains
+# pyrefly: ignore [missing-import]
 from src.schemas.interview import (
     QuestionGenerationRequest,
     QuestionSetResponse,

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pytest
 from src.core.llm import get_llm
 from src.middleware.llm_middleware import (
@@ -13,9 +14,10 @@ from src.core.config import settings
 def test_get_llm_default():
     llm = get_llm()
     assert llm is not None
-    expected_model = settings.parse_provider_and_model()[1]
-    assert llm.model_name in ("llama-3.3-70b-versatile", expected_model)
-    assert llm.temperature == 0.3
+    expected_model = settings.get_llm_settings().model_name
+    actual_model = getattr(llm, "model_name", None) or getattr(llm, "model", None)
+    assert actual_model == expected_model
+    assert abs(llm.temperature - settings.llm.temperature) < 1e-6
 
 def test_get_llm_explicit_override():
     llm = get_llm(

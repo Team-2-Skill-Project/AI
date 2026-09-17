@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session

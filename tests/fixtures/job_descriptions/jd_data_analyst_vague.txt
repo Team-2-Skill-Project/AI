@@ -1,0 +1,25 @@
+Data Analyst — Operations Team
+
+We are hiring a Data Analyst to join our operations team and help us make
+better data-driven decisions across our business units.
+
+What You Will Do
+- Analyze large datasets to uncover business insights and trends
+- Build dashboards and visualizations using Tableau or Power BI
+- Write complex SQL queries to extract and transform data from our data warehouse
+- Collaborate with business stakeholders to define KPIs and metrics
+- Prepare weekly and monthly performance reports for management
+
+What We Look For
+- Proficiency in SQL and data manipulation
+- Experience with Excel for data analysis and pivot tables
+- Familiarity with Python for data processing (pandas, numpy)
+- Experience with Tableau or Power BI for visualization
+- Strong attention to detail and analytical thinking
+
+Bonus
+- Knowledge of dbt for data transformation
+- Exposure to Google BigQuery or Snowflake
+
+Compensation: Competitive salary based on experience.
+Apply via our careers page.

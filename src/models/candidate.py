@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -103,10 +104,10 @@ class CVExtractionSchema(BaseModel):
 
 
 class CandidatePreferences(BaseModel):
-    employment_type: list[str] = Field(default_factory=lambda: ["full_time", "internship"], description="Preferred employment types")
-    work_mode: list[str] = Field(default_factory=lambda: ["remote", "hybrid"], description="Preferred work modes (remote, hybrid, onsite)")
-    locations: list[str] = Field(default_factory=lambda: ["Egypt"], description="Preferred geographic locations")
-    industries: list[str] = Field(default_factory=lambda: ["Technology"], description="Target industries")
+    employment_type: list[str] = Field(default_factory=list, description="Preferred employment types")
+    work_mode: list[str] = Field(default_factory=list, description="Preferred work modes (remote, hybrid, onsite)")
+    locations: list[str] = Field(default_factory=list, description="Preferred geographic locations")
+    industries: list[str] = Field(default_factory=list, description="Target industries")
 
 
 class CandidateProfileDetails(BaseModel):

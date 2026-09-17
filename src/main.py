@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Convenient application entry point.
 
 The implementation remains in ``src.api.main`` so the original AI-Serv5

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from .confidence_scorer import ConfidenceScorer
 from .document_loader import DocumentLoader
 from .evidence_linker import EvidenceLinker

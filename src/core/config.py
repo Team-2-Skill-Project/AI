@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Central application configuration.
 
 The original CV service and the feature services used two different settings
@@ -6,61 +7,114 @@ and adds the feature-service settings behind one shared ``settings`` object.
 """
 
 import os
+import logging
+import warnings
 from functools import lru_cache
 from pathlib import Path
+from typing import ClassVar, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def resolve_taxonomy_path(raw_path: str | None = None) -> str:
-    """Resolve relative taxonomy paths independently of the working directory."""
-    if not raw_path:
-        return str(BASE_DIR / "docs" / "ai-contract" / "skills_seed.json")
+    """Resolve and validate taxonomy paths from a stable project-root base."""
+    default_path = BASE_DIR / "docs" / "ai-contract" / "skills_seed.json"
+    if not raw_path or not raw_path.strip():
+        candidate = default_path
+    else:
+        path_obj = Path(raw_path.strip())
+        candidate = path_obj if path_obj.is_absolute() else BASE_DIR / path_obj
 
-    path_obj = Path(raw_path)
-    if path_obj.is_absolute():
-        return str(path_obj)
-    if path_obj.exists():
-        return str(path_obj.resolve())
-    return str(BASE_DIR / path_obj)
+    candidate = candidate.resolve()
+    if not candidate.is_file():
+        raise ValueError(f"Invalid TAXONOMY_PATH: '{raw_path or candidate}' does not exist.")
+    return str(candidate)
 
 
 class LLMSettings(BaseModel):
-    """Configuration consumed by the canonical CV extraction LLM service."""
+    """Single canonical LLM configuration consumed across all features."""
 
     provider: str = Field(default="gemini")
     api_key: str | None = Field(default=None)
-    model_name: str = Field(default="gemini-3.6-flash")
+    model_name: str = Field(default="gemini-3.5-flash")
     base_url: str | None = Field(default=None)
     temperature: float = Field(default=0.0)
     max_tokens: int = Field(default=4096)
+    timeout: float = Field(default=60.0)
+    max_retries: int = Field(default=2)
+
+    SUPPORTED_PROVIDERS: ClassVar[set[str]] = {
+        "gemini",
+        "google",
+        "openai",
+        "groq",
+        "anthropic",
+        "mistral",
+        "deepseek",
+        "ollama",
+        "vllm",
+        "custom",
+    }
+
+    @classmethod
+    def validate_provider(cls, provider: str) -> str:
+        """Return a normalized provider name or fail clearly at the boundary."""
+        normalized = (provider or "").strip().lower()
+        if normalized not in cls.SUPPORTED_PROVIDERS:
+            supported = ", ".join(sorted(cls.SUPPORTED_PROVIDERS))
+            raise ValueError(f"Unsupported LLM provider '{provider}'. Supported providers: {supported}")
+        return normalized
 
     @classmethod
     def load_from_env(cls) -> "LLMSettings":
-        """Load the legacy CV-provider settings and compatible aliases."""
+        """Load unified LLM settings from environment variables."""
         load_dotenv(override=True)
         provider = (
             os.getenv("LLM_PROVIDER")
             or ("openai" if os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY") else "gemini")
         ).lower().strip()
 
-        api_key = (
-            os.getenv("LLM_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
-            or os.getenv("GOOGLE_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-            or os.getenv("GROQ_API_KEY")
-            or None
-        )
+        provider_keys = {
+            "gemini": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
+            "google": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
+            "openai": os.getenv("OPENAI_API_KEY"),
+            "groq": os.getenv("GROQ_API_KEY"),
+            "anthropic": os.getenv("ANTHROPIC_API_KEY"),
+        }
+        # LLM_API_KEY is the intentional generic escape hatch. Provider-specific
+        # variables are consulted only for the selected provider.
+        api_key = os.getenv("LLM_API_KEY") or provider_keys.get(provider) or None
+        if api_key:
+            api_key = api_key.strip()
+
         model_name = (
-            os.getenv("LLM_MODEL_NAME")
-            or ("gpt-4o-mini" if provider == "openai" else "gemini-3.6-flash")
+            os.getenv("LLM_MODEL")
+            or os.getenv("LLM_MODEL_NAME")
+            or "gemini-3.5-flash"
         ).strip()
+        if os.getenv("LLM_MODEL_NAME") and not os.getenv("LLM_MODEL"):
+            warnings.warn(
+                "LLM_MODEL_NAME is deprecated; use LLM_MODEL instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # If model_name was supplied as 'provider/model', extract both cleanly
+        if "/" in model_name:
+            prefix_prov, clean_model = model_name.split("/", 1)
+            if not os.getenv("LLM_PROVIDER"):
+                provider = prefix_prov.lower().strip()
+                model_name = clean_model.strip()
+            elif prefix_prov.lower().strip() == provider:
+                model_name = clean_model.strip()
 
         try:
             temperature = float(os.getenv("LLM_TEMPERATURE", "0.0"))
@@ -72,14 +126,29 @@ class LLMSettings(BaseModel):
         except ValueError:
             max_tokens = 4096
 
+        try:
+            timeout = float(os.getenv("LLM_TIMEOUT", "60.0"))
+        except ValueError:
+            timeout = 60.0
+
+        try:
+            max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+        except ValueError:
+            max_retries = 2
+
         base_url = os.getenv("LLM_BASE_URL")
+        if base_url:
+            base_url = base_url.strip() or None
+
         return cls(
             provider=provider,
-            api_key=api_key.strip() if api_key else None,
+            api_key=api_key,
             model_name=model_name,
-            base_url=base_url.strip() if base_url else None,
+            base_url=base_url,
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout=timeout,
+            max_retries=max_retries,
         )
 
 
@@ -112,7 +181,7 @@ class AppSettings(BaseModel):
 
 
 class Settings(BaseModel):
-    """Shared settings for matching, interviews, persistence, and workers."""
+    """Shared unified settings for matching, interviews, persistence, and workers."""
 
     PROJECT_NAME: str = "SkillMatch AI Services"
     VERSION: str = "1.0.0"
@@ -127,24 +196,15 @@ class Settings(BaseModel):
         "http://127.0.0.1:8080",
     ])
 
-    # Unified LLM configuration used by feature chains.
-    LLM_MODEL: str = "groq/llama-3.3-70b-versatile"
-    LLM_BASE_URL: str | None = None
-    LLM_API_KEY: str | None = None
-    LLM_TEMPERATURE: float = Field(default=0.3, ge=0.0, le=2.0)
-    LLM_MAX_TOKENS: int = Field(default=2048, ge=1)
-    LLM_MAX_RETRIES: int = Field(default=2, ge=0)
-    LLM_TIMEOUT: float = Field(default=60.0, gt=0.0)
-
-    # Provider-specific keys.
-    GROQ_API_KEY: str = ""
-    OPENAI_API_KEY: str = ""
-    ANTHROPIC_API_KEY: str = ""
-    GEMINI_API_KEY: str = ""
-    GROQ_MODEL: str | None = None
+    # Canonical LLM configuration. Runtime code must use this object.
+    llm: LLMSettings = Field(default_factory=LLMSettings.load_from_env)
+    LLM_ALLOW_REQUEST_OVERRIDES: bool = False
 
     # Persistence and background processing.
     DATABASE_URL: str = str(BASE_DIR / "skillmatch.db")
+    JOOBLE_API_KEY: str | None = None
+    JOOBLE_API_BASE_URL: str = "https://eg.jooble.org/api"
+    JOOBLE_TIMEOUT: float = Field(default=20.0, gt=0.0)
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_MAX_CONNECTIONS: int = Field(default=20, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0.0)
@@ -160,7 +220,8 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Settings":
-        """Build settings from environment variables without requiring a plugin."""
+        """Build unified settings from environment variables."""
+        llm_cfg = LLMSettings.load_from_env()
 
         def env(name: str, default: str | None = None) -> str | None:
             value = os.getenv(name)
@@ -186,7 +247,6 @@ class Settings(BaseModel):
 
         origins_raw = env("CORS_ORIGINS") or env("CORS_ALLOWED_ORIGINS")
         origins = [item.strip() for item in origins_raw.split(",") if item.strip()] if origins_raw else None
-        llm_model = env("LLM_MODEL") or env("LLM_MODEL_NAME") or "groq/llama-3.3-70b-versatile"
         database_url = env("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'skillmatch.db'}"
 
         return cls(
@@ -195,19 +255,12 @@ class Settings(BaseModel):
             API_V1_STR=env("API_V1_STR", "/api/v1"),
             ENVIRONMENT=env("ENVIRONMENT", "development"),
             CORS_ORIGINS=origins or cls().CORS_ORIGINS,
-            LLM_MODEL=llm_model,
-            LLM_BASE_URL=env("LLM_BASE_URL"),
-            LLM_API_KEY=env("LLM_API_KEY"),
-            LLM_TEMPERATURE=env_float("LLM_TEMPERATURE", 0.3),
-            LLM_MAX_TOKENS=env_int("LLM_MAX_TOKENS", 2048),
-            LLM_MAX_RETRIES=env_int("LLM_MAX_RETRIES", 2),
-            LLM_TIMEOUT=env_float("LLM_TIMEOUT", 60.0),
-            GROQ_API_KEY=env("GROQ_API_KEY", "") or "",
-            OPENAI_API_KEY=env("OPENAI_API_KEY", "") or "",
-            ANTHROPIC_API_KEY=env("ANTHROPIC_API_KEY", "") or "",
-            GEMINI_API_KEY=env("GEMINI_API_KEY", "") or "",
-            GROQ_MODEL=env("GROQ_MODEL"),
+            LLM_ALLOW_REQUEST_OVERRIDES=env_bool("LLM_ALLOW_REQUEST_OVERRIDES", False),
+            llm=llm_cfg,
             DATABASE_URL=database_url,
+            JOOBLE_API_KEY=(env("JOOBLE_API_KEY") or None),
+            JOOBLE_API_BASE_URL=env("JOOBLE_API_BASE_URL", "https://eg.jooble.org/api") or "https://eg.jooble.org/api",
+            JOOBLE_TIMEOUT=env_float("JOOBLE_TIMEOUT", 20.0),
             REDIS_URL=env("REDIS_URL", "redis://localhost:6379/0"),
             REDIS_MAX_CONNECTIONS=env_int("REDIS_MAX_CONNECTIONS", 20),
             REDIS_SOCKET_TIMEOUT=env_float("REDIS_SOCKET_TIMEOUT", 2.0),
@@ -220,43 +273,40 @@ class Settings(BaseModel):
             LOG_LEVEL=env("LOG_LEVEL", "INFO"),
         )
 
-    def parse_provider_and_model(self, model_str: str | None = None) -> tuple[str, str]:
-        """Split ``provider/model`` identifiers, defaulting bare models to Groq."""
-        target = (model_str or self.LLM_MODEL).strip()
-        if "/" in target:
-            provider, model = target.split("/", 1)
-            if provider.lower() in {"groq", "openai", "anthropic"}:
-                return provider.lower(), model.strip()
-        return "groq", target
+    def parse_provider_and_model(
+        self,
+        model_str: str | None = None,
+        provider_str: str | None = None
+    ) -> tuple[str, str]:
+        """
+        Resolve (provider, model_name) cleanly without guessing.
+        Priority:
+          1. Explicit provider passed as argument
+          2. Explicit provider prefix embedded in model_str (e.g. 'openai/gpt-4o')
+          3. Global configured LLM_PROVIDER from settings
+        """
+        canonical_llm = self.llm
+        target_model = (model_str or canonical_llm.model_name).strip()
 
-    def get_api_keys(self, provider: str) -> list[str]:
-        """Return configured keys in priority order for the requested provider."""
-        keys: list[str] = []
-        if self.LLM_API_KEY:
-            keys.extend(key.strip() for key in self.LLM_API_KEY.split(",") if key.strip())
+        if provider_str:
+            normalized_provider = provider_str.lower().strip()
+            # Strip only an explicit prefix for the selected provider. Some
+            # providers use a slash inside their model IDs (for example
+            # Groq's ``openai/gpt-oss-20b``), which must be preserved.
+            prefix = f"{normalized_provider}/"
+            if target_model.lower().startswith(prefix):
+                target_model = target_model[len(prefix):]
+            return normalized_provider, target_model.strip()
 
-        provider_key = {
-            "groq": self.GROQ_API_KEY,
-            "openai": self.OPENAI_API_KEY,
-            "anthropic": self.ANTHROPIC_API_KEY,
-            "gemini": self.GEMINI_API_KEY,
-            "google": self.GEMINI_API_KEY,
-        }.get(provider.lower().strip(), "")
-        for key in provider_key.split(","):
-            key = key.strip()
-            if key and key not in keys:
-                keys.append(key)
+        if "/" in target_model:
+            prov, model = target_model.split("/", 1)
+            return prov.lower().strip(), model.strip()
 
-        for env_name in ("GROQ_API_KEY_SECONDARY", "OPENAI_API_KEY_SECONDARY", "LLM_API_KEY_FALLBACK"):
-            fallback = os.getenv(env_name, "").strip()
-            if fallback and fallback not in keys:
-                keys.append(fallback)
-        return keys
+        return canonical_llm.provider.lower().strip(), target_model
 
-    def get_api_key(self, provider: str) -> str:
-        """Return the first configured key for a provider."""
-        keys = self.get_api_keys(provider)
-        return keys[0] if keys else ""
+    def get_llm_settings(self) -> LLMSettings:
+        """Return an LLMSettings instance matching the unified configuration."""
+        return self.llm
 
 
 settings = Settings.from_env()
@@ -264,7 +314,8 @@ settings = Settings.from_env()
 
 @lru_cache
 def get_llm_settings() -> LLMSettings:
-    return LLMSettings.load_from_env()
+    """Return the unified LLM settings object."""
+    return settings.get_llm_settings()
 
 
 @lru_cache

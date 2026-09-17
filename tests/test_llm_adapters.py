@@ -1,60 +1,49 @@
+from __future__ import annotations
+from unittest.mock import MagicMock, patch
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from pydantic import BaseModel
-from src.ai.adapters.base import BaseLLMAdapter
-from src.ai.adapters.groq_adapter import GroqAdapter
-from src.ai.adapters.openai_adapter import OpenAIAdapter
-from src.ai.adapters.factory import LLMAdapterFactory, get_adapter
 
-class SampleSchema(BaseModel):
-    summary: str
-    confidence: float
+from src.core.llm import get_llm
 
-def test_groq_adapter_initialization():
-    adapter = GroqAdapter(model="llama-3.3-70b-versatile", temperature=0.2)
-    assert adapter.provider_name == "groq"
-    assert "llama-3.3-70b-versatile" in adapter.model_name
-    info = adapter.get_model_info()
-    assert info["provider"] == "groq"
 
-def test_openai_adapter_initialization():
-    adapter = OpenAIAdapter(model="gpt-4o-mini", temperature=0.5, api_key="sk-test")
-    assert adapter.provider_name == "openai"
-    assert "gpt-4o-mini" in adapter.model_name
-    info = adapter.get_model_info()
-    assert info["provider"] == "openai"
+def test_canonical_factory_resolves_provider_and_model():
+    with patch("src.core.llm.init_chat_model", return_value=MagicMock()) as init_model:
+        get_llm(provider="openai", model="gpt-test", api_key="test-key", temperature=0.5)
 
-def test_adapter_factory_resolution():
-    groq_adapter = LLMAdapterFactory.get_adapter(provider="groq", model="llama-3.1-8b-instant")
-    assert isinstance(groq_adapter, GroqAdapter)
+    kwargs = init_model.call_args.kwargs
+    assert kwargs["model_provider"] == "openai"
+    assert kwargs["model"] == "gpt-test"
+    assert kwargs["api_key"] == "test-key"
+    assert kwargs["temperature"] == 0.5
 
-    openai_adapter = LLMAdapterFactory.get_adapter(provider="openai", model="gpt-4o")
-    assert isinstance(openai_adapter, OpenAIAdapter)
 
-    default_adapter = get_adapter()
-    assert isinstance(default_adapter, BaseLLMAdapter)
+def test_canonical_factory_maps_gemini_provider():
+    with patch("src.core.llm.init_chat_model", return_value=MagicMock()) as init_model:
+        get_llm(provider="gemini", model="gemini-test", api_key="test-key")
 
-@pytest.mark.asyncio
-async def test_adapter_generate_structured_mock():
-    mock_llm = MagicMock()
-    mock_structured = MagicMock()
-    mock_structured.ainvoke = AsyncMock(return_value=SampleSchema(summary="Matched perfectly", confidence=0.95))
-    mock_llm.with_structured_output.return_value = mock_structured
+    kwargs = init_model.call_args.kwargs
+    assert kwargs["model_provider"] == "google_genai"
+    assert kwargs["google_api_key"] == "test-key"
 
-    with patch("src.ai.adapters.groq_adapter.get_llm", return_value=mock_llm):
-        adapter = GroqAdapter(model="llama-3.3-70b-versatile")
-        res = await adapter.generate_structured(SampleSchema, prompt="Evaluate candidate")
-        assert res.summary == "Matched perfectly"
-        assert res.confidence == 0.95
 
-@pytest.mark.asyncio
-async def test_adapter_generate_text_mock():
-    mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = "Candidate demonstrates great potential."
-    mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+def test_local_provider_does_not_require_api_key():
+    with patch("src.core.llm.init_chat_model", return_value=MagicMock()) as init_model:
+        get_llm(provider="ollama", model="llama-local", base_url="http://localhost:11434/v1")
+    assert init_model.call_args.kwargs["model_provider"] == "ollama"
 
-    with patch("src.ai.adapters.openai_adapter.get_llm", return_value=mock_llm):
-        adapter = OpenAIAdapter(model="gpt-4o-mini")
-        text = await adapter.generate_text(prompt="Give summary")
-        assert "great potential" in text
+
+def test_unknown_provider_fails_clearly():
+    with pytest.raises(ValueError, match="Unsupported LLM provider"):
+        get_llm(provider="unknown-provider", model="test", api_key="test-key")
+
+
+def test_missing_external_api_key_fails_before_model_creation():
+    from src.core import llm as llm_module
+    from src.core.config import LLMSettings
+
+    old_settings = llm_module.settings.llm
+    llm_module.settings.llm = LLMSettings(provider="gemini", model_name="gemini-test", api_key=None)
+    try:
+        with pytest.raises(ValueError, match="LLM_API_KEY is required"):
+            get_llm()
+    finally:
+        llm_module.settings.llm = old_settings
