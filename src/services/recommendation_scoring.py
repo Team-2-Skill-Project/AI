@@ -194,11 +194,11 @@ def calculate_preference_fit(
       - Location: 35%
       - Employment Type: 25%
     
-    If candidate has no preferences or preferences are empty, returns 100.0 (neutral).
-    If a job is missing a field, that dimension is treated as neutral (100.0).
+    Missing preference/job data is neutral (50.0), rather than a positive match.
     """
+    neutral_score = 50.0
     if not candidate_preferences:
-        return 100.0
+        return neutral_score
 
     pref_work_modes = getattr(candidate_preferences, "work_mode", []) or []
     pref_locations = getattr(candidate_preferences, "locations", []) or []
@@ -209,13 +209,13 @@ def calculate_preference_fit(
         pref_locations = candidate_preferences.get("locations", []) or []
         pref_types = candidate_preferences.get("employment_type", []) or []
 
-    # If candidate specified no preferences across all categories, treat as open (100.0)
+    # No stated preferences provide no positive preference signal.
     if not pref_work_modes and not pref_locations and not pref_types:
-        return 100.0
+        return neutral_score
 
     # 1. Work Mode Fit (40%)
     if not pref_work_modes or not job_work_mode:
-        work_mode_score = 100.0
+        work_mode_score = neutral_score
     else:
         norm_job_wm = job_work_mode.lower().strip()
         norm_pref_wm = [m.lower().strip() for m in pref_work_modes]
@@ -230,7 +230,7 @@ def calculate_preference_fit(
 
     # 2. Location Fit (35%)
     if not pref_locations or not job_location:
-        loc_score = 100.0
+        loc_score = neutral_score
     else:
         norm_job_loc = job_location.lower().strip()
         norm_pref_locs = [l.lower().strip() for l in pref_locations]
@@ -243,7 +243,7 @@ def calculate_preference_fit(
 
     # 3. Employment Type Fit (25%)
     if not pref_types or not job_employment_type:
-        type_score = 100.0
+        type_score = neutral_score
     else:
         norm_job_type = job_employment_type.lower().strip().replace("-", "_")
         norm_pref_types = [t.lower().strip().replace("-", "_") for t in pref_types]
@@ -268,11 +268,10 @@ def calculate_freshness_score(
     - Posted 7 days ago: 70.5
     - Posted 14 days ago: 49.6
     - Posted 30 days ago: 22.3
-    - Missing posted_at: Treated as 7 days old (70.5)
+    - Missing or invalid posted_at: Neutral (50.0)
     """
     if not posted_at:
-        # 7 days old default: 100 * exp(-0.05 * 7) ≈ 70.5
-        return 70.5
+        return 50.0
 
     now = now_dt or datetime.now(timezone.utc)
 
@@ -284,10 +283,10 @@ def calculate_freshness_score(
             clean_str = posted_at.replace("Z", "+00:00")
             dt_obj = datetime.fromisoformat(clean_str)
         except Exception:
-            return 70.5
+            return 50.0
 
     if not dt_obj:
-        return 70.5
+        return 50.0
 
     if dt_obj.tzinfo is None:
         dt_obj = dt_obj.replace(tzinfo=timezone.utc)
@@ -309,7 +308,8 @@ def calculate_behavior_score(
     Calculates deterministic Behavior score (0.0 to 100.0).
     
     - Cold Start / No History: 50.0 (neutral baseline, contributes 2.5 pts).
-    - Saved Job Affinity: 75.0 - 100.0 (contributes up to 5.0 pts).
+    - Saved Job Affinity: 100.0 only for the current job.
+    - Unrelated or missing history: 50.0 (neutral).
     """
     if not candidate_behavior:
         return 50.0
@@ -326,11 +326,6 @@ def calculate_behavior_score(
     # If the candidate explicitly saved this job
     if job_id and job_id in saved_ids:
         return 100.0
-
-    # If candidate saved related jobs or has active applications
-    if saved_ids or applied_ids:
-        # Moderate affinity signal
-        return 75.0
 
     return 50.0
 

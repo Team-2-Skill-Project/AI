@@ -59,6 +59,8 @@ class JobRequirementRepository:
             record.min_years_experience = profile.min_years_experience
             record.max_years_experience = profile.max_years_experience
             record.responsibilities = profile.responsibilities
+            # Keep the canonical catalog field in sync with the structured profile.
+            record.required_skills = [skill.model_dump(mode="json") for skill in profile.required_skills]
             record.structured_profile = profile.model_dump(mode="json")
 
             db.commit()

@@ -2,7 +2,7 @@
 
 This document provides complete technical specifications for all API endpoints exposed by the **SkillMatch AI Services (AI-Serv5)** platform, including request headers, query parameters, input JSON schemas/payloads, and output JSON schemas/payloads.
 
-A machine-readable JSON version of this document is available at [`docs/api_documentation.json`](file:///c:/Users/NV_USER/Desktop/AI-Serv5/docs/api_documentation.json).
+A machine-readable JSON version of this document is available at [`docs/api_documentation.json`](api_documentation.json).
 
 ---
 
@@ -14,7 +14,9 @@ A machine-readable JSON version of this document is available at [`docs/api_docu
 5. [Job Description Understanding Endpoints](#5-job-description-understanding-endpoints)
 6. [Interview Preparation Coach Endpoints](#6-interview-preparation-coach-endpoints)
 7. [Skill Gap Analysis & Explainable Match Endpoints](#7-skill-gap-analysis--explainable-match-endpoints)
-8. [Shared Review Queue Endpoints](#8-shared-review-queue-endpoints)
+8. [Personalized Job Recommendation Endpoints](#8-personalized-job-recommendation-endpoints)
+9. [Shared Review Queue Endpoints](#9-shared-review-queue-endpoints)
+10. [Dynamic Career Roadmap Endpoints](#10-dynamic-career-roadmap-endpoints)
 
 ---
 
@@ -63,7 +65,7 @@ Common `error_code` values:
   "service": "SkillMatch AI Services",
   "version": "1.0.0",
   "environment": "development",
-  "active_model": "llama-3.3-70b-versatile",
+  "active_model": "configured-model",
   "redis": {
     "status": "connected",
     "url": "redis://localhost:6379/0"
@@ -494,9 +496,42 @@ Common `error_code` values:
 
 ---
 
-## 8. Shared Review Queue Endpoints
+## 8. Personalized Job Recommendation Endpoints
 
-### 8.1 `GET /api/v1/review-queue/`
+### 8.1 `GET /api/v1/recommendations/feed`
+* **Summary**: Get the deterministic personalized recommendation feed for a candidate.
+* **Tag**: `Personalized Job Recommendations`
+* **Query Parameters**:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `candidate_id` | string | No | Candidate identifier; defaults to `cand_001` |
+| `page` | integer | No | 1-indexed page number; minimum 1 |
+| `limit` | integer | No | Results per page; 1 to 50 |
+| `work_mode` | string | No | Optional `remote`, `hybrid`, or `onsite` filter |
+| `location` | string | No | Optional location substring filter |
+| `min_score` | number | No | Final score cutoff from 0 to 100 |
+
+#### Response (`200 OK`):
+```json
+{
+  "candidate_id": "cand_001",
+  "total_results": 0,
+  "page": 1,
+  "limit": 20,
+  "has_more": false,
+  "generated_at": "2026-09-17T10:00:00Z",
+  "recommendations": []
+}
+```
+
+Only jobs that pass deterministic qualification eligibility are returned. The ranking formula is `0.60 match + 0.15 role + 0.10 preference + 0.10 freshness + 0.05 behavior`; `min_score` is applied after eligibility.
+
+---
+
+## 9. Shared Review Queue Endpoints
+
+### 9.1 `GET /api/v1/review-queue/`
 * **Summary**: List Review Queue Items
 * **Tag**: `Shared Review Queue`
 * **Query Parameters**:
@@ -533,7 +568,7 @@ Common `error_code` values:
 
 ---
 
-### 8.2 `GET /api/v1/review-queue/{item_id}`
+### 9.2 `GET /api/v1/review-queue/{item_id}`
 * **Summary**: Get Single Review Queue Item
 * **Tag**: `Shared Review Queue`
 
@@ -560,7 +595,7 @@ Common `error_code` values:
 
 ---
 
-### 8.3 `POST /api/v1/review-queue/{item_id}/claim`
+### 9.3 `POST /api/v1/review-queue/{item_id}/claim`
 * **Summary**: Claim Item for Review
 * **Tag**: `Shared Review Queue`
 
@@ -586,7 +621,7 @@ Common `error_code` values:
 
 ---
 
-### 8.4 `POST /api/v1/review-queue/{item_id}/resolve`
+### 9.4 `POST /api/v1/review-queue/{item_id}/resolve`
 * **Summary**: Resolve Review Item
 * **Tag**: `Shared Review Queue`
 
@@ -625,9 +660,9 @@ Common `error_code` values:
 
 ---
 
-## 9. Dynamic Career Roadmap Endpoints
+## 10. Dynamic Career Roadmap Endpoints
 
-### 9.1 `POST /api/v1/roadmap/generate`
+### 10.1 `POST /api/v1/roadmap/generate`
 * **Summary**: Generate Dynamic Career Roadmap
 * **Tag**: `Dynamic Career Roadmap`
 * **Description**: Converts candidate skill gaps and target role metadata into a sequenced, multi-phase learning roadmap with milestones, weekly tasks, and cited gap grounding.
@@ -685,7 +720,7 @@ Common `error_code` values:
 
 ---
 
-### 9.2 `GET /api/v1/roadmap/{candidate_id}`
+### 10.2 `GET /api/v1/roadmap/{candidate_id}`
 * **Summary**: Get Active Candidate Roadmap
 * **Tag**: `Dynamic Career Roadmap`
 

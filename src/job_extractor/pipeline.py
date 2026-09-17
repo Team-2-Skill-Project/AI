@@ -8,7 +8,6 @@ Step 3 — Score:      Heuristic confidence score based on extraction completene
 
 import logging
 
-from src.core.llm_service import LLMService, get_llm_service
 from src.taxonomy.taxonomy_manager import TaxonomyManager
 
 from .llm_extractor import JobLLMExtractor
@@ -29,10 +28,10 @@ class JobExtractionPipeline:
     def __init__(
         self,
         taxonomy_manager: TaxonomyManager | None = None,
-        llm_service: LLMService | None = None,
+        llm=None,
     ):
         self.taxonomy = taxonomy_manager or TaxonomyManager()
-        self.extractor = JobLLMExtractor(llm_service=llm_service or get_llm_service())
+        self.extractor = JobLLMExtractor(llm=llm)
 
     # ------------------------------------------------------------------
     # Public API

@@ -157,13 +157,18 @@ def build_recommendation_explanation(
             )
         )
 
-    # Headline generation
-    if matched_skills:
+    # Keep headline language proportional to the authoritative skill match.
+    overall_match = float(match_result.overall_match_score or 0.0)
+    if overall_match >= 80.0 and matched_skills:
         headline = f"Strong match for your {', '.join(matched_skills[:2])} background"
+    elif overall_match >= 60.0:
+        headline = f"Good match for your profile at {getattr(job, 'company', 'company') or 'company'}"
+    elif overall_match > 0.0:
+        headline = f"Partial match opportunity at {getattr(job, 'company', 'company') or 'company'}"
     elif score_breakdown.role_relevance_score >= 75.0:
         headline = f"Aligned with your target role as {job_title}"
     else:
-        headline = f"Recommended opportunity at {getattr(job, 'company', 'company') or 'company'}"
+        headline = f"Stretch opportunity at {getattr(job, 'company', 'company') or 'company'}"
 
     explanation = RecommendationExplanation(
         headline=headline,

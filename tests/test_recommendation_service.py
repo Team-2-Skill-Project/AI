@@ -13,6 +13,7 @@ from src.models.candidate import (
     SkillLevel,
 )
 from src.services.recommendation_service import RecommendationService
+from src.repositories.mock_job_repository import MockJobRepository
 
 
 @pytest.fixture
@@ -77,7 +78,7 @@ async def test_end_to_end_ranking_python_senior(python_senior_candidate):
       - Match score >= 90.0.
       - Applied (job_028), dismissed (job_029), expired (job_022), inactive (job_024) are absent.
     """
-    service = RecommendationService()
+    service = RecommendationService(job_repository=MockJobRepository())
     feed = await service.get_recommendation_feed(python_senior_candidate, page=1, limit=20)
 
     assert len(feed.recommendations) > 0
@@ -108,7 +109,7 @@ async def test_end_to_end_ranking_python_senior(python_senior_candidate):
 @pytest.mark.asyncio
 async def test_recommendation_pagination(python_senior_candidate):
     """Verify pagination slices items cleanly without duplicate rank overlap."""
-    service = RecommendationService()
+    service = RecommendationService(job_repository=MockJobRepository())
 
     # Page 1 (limit 3)
     page1 = await service.get_recommendation_feed(python_senior_candidate, page=1, limit=3)

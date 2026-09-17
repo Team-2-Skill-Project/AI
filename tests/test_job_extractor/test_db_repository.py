@@ -77,6 +77,7 @@ class TestJobRequirementRepositoryUpsert:
         assert mock_record.min_years_experience == 5
         assert mock_record.max_years_experience == 8
         assert mock_record.responsibilities == ["Design APIs", "Lead code reviews"]
+        assert mock_record.required_skills[0]["skill_id"] == "skill_python"
         assert mock_record.structured_profile is not None
 
     def test_upsert_rolls_back_on_db_error(self):

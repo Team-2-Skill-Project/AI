@@ -42,7 +42,7 @@ class RoadmapGenerationChain:
         self._custom_llm = llm
         self.role_family = role_family
         self.model_name = model_name
-        self.temperature = temperature or 0.2
+        self.temperature = temperature
 
     def get_active_llm(self) -> BaseChatModel:
         if self._custom_llm is not None:

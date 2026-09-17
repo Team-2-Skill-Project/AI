@@ -1,22 +1,23 @@
 from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 from starlette.testclient import TestClient
 
 from src.api.main import app
 from src.api.schemas.cv_schemas import ExtractionErrorResponse
-from src.core.llm_service import LLMService
+from src.core.config import settings
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def mock_llm_provider():
-    """Ensure no test in test_api_cv makes real network calls to external LLM providers."""
-    with patch.object(LLMService, "is_available", return_value=False), \
-         patch.object(LLMService, "generate_json", side_effect=RuntimeError("No live network calls allowed in unit tests")):
+def disable_llm_for_api_tests():
+    """Force the extractor's existing heuristic path; no external calls."""
+    original = settings.llm
+    settings.llm = original.model_copy(update={"api_key": None, "base_url": None})
+    try:
         yield
+    finally:
+        settings.llm = original
 
 
 

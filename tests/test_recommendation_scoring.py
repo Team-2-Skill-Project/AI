@@ -85,10 +85,10 @@ def test_preference_fit_scoring():
     # 0.40 * 0 + 0.35 * 100 + 0.25 * 100 = 60.0
     assert score_wm_mismatch == 60.0
 
-    # Empty candidate preferences -> neutral 100.0
+    # Empty candidate preferences -> neutral 50.0
     empty_prefs = CandidatePreferences()
-    assert calculate_preference_fit(empty_prefs, job_work_mode="onsite", job_location="Tokyo") == 100.0
-    assert calculate_preference_fit(None, job_work_mode="onsite") == 100.0
+    assert calculate_preference_fit(empty_prefs, job_work_mode="onsite", job_location="Tokyo") == 50.0
+    assert calculate_preference_fit(None, job_work_mode="onsite") == 50.0
 
 
 def test_freshness_decay_scoring():
@@ -113,8 +113,8 @@ def test_freshness_decay_scoring():
     score_30 = calculate_freshness_score(thirty_days_ago, now_dt=now)
     assert 22.0 <= score_30 <= 23.0
 
-    # Missing posted_at defaults to 7 days (70.5)
-    assert calculate_freshness_score(None) == 70.5
+    # Missing posted_at is neutral
+    assert calculate_freshness_score(None) == 50.0
 
 
 def test_behavior_scoring():
@@ -129,9 +129,9 @@ def test_behavior_scoring():
     behavior_saved = CandidateBehaviorHistory(saved_job_ids=["job_100"])
     assert calculate_behavior_score(behavior_saved, job_mock) == 100.0
 
-    # General activity -> 75.0
+    # Unrelated activity does not imply affinity for this job
     behavior_active = CandidateBehaviorHistory(saved_job_ids=["job_999"])
-    assert calculate_behavior_score(behavior_active, job_mock) == 75.0
+    assert calculate_behavior_score(behavior_active, job_mock) == 50.0
 
 
 def test_composite_recommendation_score():

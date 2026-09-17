@@ -78,7 +78,7 @@ def build_prompt(job_description: str) -> tuple[str, str]:
     Build the system prompt and user prompt for job description extraction.
 
     Returns:
-        A tuple of (system_prompt, user_prompt) to pass to LLMService.generate_json.
+        A tuple of (system_prompt, user_prompt) to pass to the canonical LLM.
     """
     # Truncate very long JDs to 12 000 characters to stay within token budget
     truncated_jd = job_description.strip()[:12_000]

@@ -18,7 +18,7 @@
         "service": "SkillMatch AI Services",
         "version": "1.0.0",
         "environment": "development",
-        "active_model": "llama-3.3-70b-versatile",
+        "active_model": "configured-model",
         "redis": {
           "status": "connected",
           "url": "redis://localhost:6379/0"
@@ -421,6 +421,31 @@
           "created_at": "2026-09-13T10:00:00Z"
         }
       ]
+    },
+    {
+      "tag": "Personalized Job Recommendations",
+      "summary": "Get Personalized Job Recommendation Feed",
+      "endpoint": "/api/v1/recommendations/feed",
+      "method": "GET",
+      "description": "Returns deterministic, eligibility-filtered job recommendations ranked by match, role, preferences, freshness, and behavior.",
+      "query_parameters": {
+        "candidate_id": "cand_001 (optional)",
+        "page": "1-indexed page number (optional, minimum 1)",
+        "limit": "Results per page (optional, 1-50)",
+        "work_mode": "remote, hybrid, or onsite (optional)",
+        "location": "Location substring (optional)",
+        "min_score": "Final score cutoff from 0 to 100 (optional)"
+      },
+      "request_body_json": null,
+      "response_body_json": {
+        "candidate_id": "cand_001",
+        "total_results": 0,
+        "page": 1,
+        "limit": 20,
+        "has_more": false,
+        "generated_at": "2026-09-17T10:00:00Z",
+        "recommendations": []
+      }
     },
     {
       "tag": "Shared Review Queue",

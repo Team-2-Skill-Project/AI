@@ -63,8 +63,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Dynamic LLM request overrides are scoped to one request and never leak.
-app.add_middleware(DynamicLLMMiddleware)
+# Request-scoped model/key/base-url overrides are disabled by default. They can
+# be enabled explicitly for a trusted development environment only.
+app.add_middleware(
+    DynamicLLMMiddleware,
+    allow_overrides=settings.LLM_ALLOW_REQUEST_OVERRIDES,
+)
 
 # Rate-limit feature endpoints centrally. The canonical CV router keeps its
 # existing dependency-based limiter so its original contract remains intact.
@@ -194,7 +198,7 @@ async def health_check():
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
-        "active_model": settings.LLM_MODEL,
+        "active_model": settings.llm.model_name,
         "redis": {
             "status": "connected" if is_redis_available() else "unavailable",
             "url": settings.REDIS_URL,

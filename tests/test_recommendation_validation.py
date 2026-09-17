@@ -150,15 +150,17 @@ def test_preference_and_freshness_acceptance_cases():
     prefs = {"work_mode": ["remote"], "locations": ["Cairo"], "employment_type": ["full_time"]}
     assert calculate_preference_fit(prefs, "remote", "Cairo", "full_time") == 100.0
     assert calculate_preference_fit(prefs, "onsite", "Riyadh", "contract") == 17.0
-    assert calculate_preference_fit({}, "onsite", "Riyadh", "contract") == 100.0
-    assert calculate_preference_fit(prefs, None, None, None) == 100.0
+    assert calculate_preference_fit({}, "onsite", "Riyadh", "contract") == 50.0
+    assert calculate_preference_fit(prefs, None, None, None) == 50.0
+    assert calculate_preference_fit(prefs, None, "Cairo", "full_time") == 80.0
+    assert calculate_preference_fit(prefs, "remote", "Cairo", None) == 87.5
 
     now = datetime(2026, 9, 13, tzinfo=timezone.utc)
     assert calculate_freshness_score(now, now) == 100.0
     assert calculate_freshness_score(now - timedelta(days=1), now) == 95.1
     assert calculate_freshness_score(now - timedelta(days=7), now) == 70.5
     assert calculate_freshness_score(now - timedelta(days=30), now) == 22.3
-    assert calculate_freshness_score(None, now) == 70.5
+    assert calculate_freshness_score(None, now) == 50.0
     assert calculate_freshness_score(now - timedelta(days=10_000), now) == 0.0
 
 
@@ -166,7 +168,7 @@ def test_behavior_is_limited_to_the_weighted_component():
     job = _job("saved")
     assert calculate_behavior_score(CandidateBehaviorHistory(), job) == 50.0
     assert calculate_behavior_score(CandidateBehaviorHistory(saved_job_ids=["saved"]), job) == 100.0
-    assert calculate_behavior_score(CandidateBehaviorHistory(applied_job_ids=["another"]), job) == 75.0
+    assert calculate_behavior_score(CandidateBehaviorHistory(applied_job_ids=["another"]), job) == 50.0
 
     high_behavior, _ = calculate_recommendation_score(90, 100, 100, 100, 100)
     low_behavior, _ = calculate_recommendation_score(90, 100, 100, 100, 0)
@@ -186,13 +188,36 @@ async def test_complete_pipeline_reuses_matching_and_ranks_scores():
 
     feed = await service.get_recommendation_feed(_candidate(), limit=10)
 
-    assert [item.job_id for item in feed.recommendations] == ["strong", "weak"]
-    assert [item.rank for item in feed.recommendations] == [1, 2]
+    assert [item.job_id for item in feed.recommendations] == ["strong"]
+    assert [item.rank for item in feed.recommendations] == [1]
     assert feed.recommendations[0].score == 97.5
     assert feed.recommendations[0].score_breakdown.match_score == 100.0
-    assert feed.recommendations[1].score_breakdown.match_score == 0.0
-    assert feed.recommendations[1].qualification_status == "Not Qualified"
     assert matching.evaluate_calls == matching.normalize_calls == matching.rule_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_min_score_zero_cannot_bypass_eligibility_and_order_is_deterministic():
+    strong = _job("strong")
+    stretch = _job(
+        "stretch",
+        title="AI Team Lead",
+        required_skills=[
+            SkillRequirement(skill_name="Python", proficiency="Advanced", is_critical=True),
+            SkillRequirement(skill_name="C++", proficiency="Advanced", is_critical=True),
+        ],
+    )
+    service = RecommendationService(
+        job_repository=StaticJobRepository([stretch, strong]),
+        behavior_repository=MockBehaviorRepository({}),
+    )
+
+    first = await service.get_recommendation_feed(_candidate(), limit=10, min_score=0)
+    second = await service.get_recommendation_feed(_candidate(), limit=10, min_score=0)
+
+    assert [item.job_id for item in first.recommendations] == ["strong", "stretch"]
+    assert [item.job_id for item in first.recommendations] == [item.job_id for item in second.recommendations]
+    assert first.recommendations[0].score_breakdown.match_score > first.recommendations[1].score_breakdown.match_score
+    assert first.recommendations[1].explanation.headline.startswith("Partial match")
 
 
 @pytest.mark.asyncio
@@ -255,11 +280,18 @@ def test_api_feed_is_personalized_and_rejects_unknown_candidates():
     )
     candidate_repository.save_candidate(custom_candidate)
 
-    known = client.get("/api/v1/recommendations/feed?candidate_id=candidate_api_custom", headers=headers)
-    unknown = client.get("/api/v1/recommendations/feed?candidate_id=does_not_exist", headers=headers)
+    from src.repositories.mock_job_repository import MockJobRepository
+    from src.services.recommendation_service import recommendation_service
+
+    original_repository = recommendation_service.job_repo
+    recommendation_service.job_repo = MockJobRepository()
+    try:
+        known = client.get("/api/v1/recommendations/feed?candidate_id=candidate_api_custom", headers=headers)
+        unknown = client.get("/api/v1/recommendations/feed?candidate_id=does_not_exist", headers=headers)
+    finally:
+        recommendation_service.job_repo = original_repository
 
     assert known.status_code == 200
     assert known.json()["candidate_id"] == "candidate_api_custom"
-    job_001 = next(item for item in known.json()["recommendations"] if item["job_id"] == "job_001")
-    assert job_001["score_breakdown"]["match_score"] == 0.0
+    assert known.json()["recommendations"] == []
     assert unknown.status_code == 404

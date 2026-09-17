@@ -15,7 +15,7 @@ from typing import List, Optional, Any, Tuple
 
 from src.repositories.behavior_repository import BehaviorRepository, MockBehaviorRepository
 from src.repositories.job_repository import JobRepository
-from src.repositories.mock_job_repository import MockJobRepository
+from src.db.repositories.job_repository import DatabaseJobRepository
 from src.schemas.job import JobPosting
 from src.schemas.recommendation import (
     CandidateBehaviorHistory,
@@ -44,7 +44,7 @@ class RecommendationService:
         matching_svc: Optional[MatchingService] = None,
         taxonomy_manager: Optional[TaxonomyManager] = None,
     ):
-        self.job_repo = job_repository or MockJobRepository()
+        self.job_repo = job_repository or DatabaseJobRepository()
         self.behavior_repo = behavior_repository or MockBehaviorRepository()
         self.matching_service = matching_svc or default_matching_service
         self.taxonomy = taxonomy_manager or TaxonomyManager()
@@ -78,6 +78,14 @@ class RecommendationService:
             filtered.append(job)
 
         return filtered
+
+    @staticmethod
+    def is_recommendation_eligible(match_result: Any) -> bool:
+        """Require a plausible authoritative match before secondary ranking signals."""
+        raw_status = getattr(match_result, "qualification_status", "")
+        status = str(getattr(raw_status, "value", raw_status))
+        score = float(getattr(match_result, "overall_match_score", 0.0) or 0.0)
+        return status in {"Qualified", "Partially Qualified"} and score > 0.0
 
     def deduplicate_jobs(self, jobs: List[JobPosting]) -> List[JobPosting]:
         """
@@ -210,6 +218,10 @@ class RecommendationService:
                 candidate_id=candidate_id,
                 taxonomy_manager=self.taxonomy,
             )
+
+            # Secondary signals must not rescue an impossible or zero-fit job.
+            if not self.is_recommendation_eligible(match_res):
+                continue
 
             # b. Role Fit
             r_fit = calculate_role_fit(

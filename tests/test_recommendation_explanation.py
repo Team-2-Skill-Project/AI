@@ -140,3 +140,40 @@ def test_build_explanation_no_hallucinations_on_missing_skills():
     assert "Kubernetes" in structured.missing_skills
     assert len(structured.matched_skills) == 0
     assert "High skill match" not in day1_reasons
+
+
+def test_weak_match_never_gets_strong_match_headline():
+    job = JobPosting(job_id="job_003", title="AI Team Lead", company="Example")
+    match_result = SkillGapAnalysisResponse(
+        job_id="job_003",
+        candidate_id="cand_001",
+        overall_match_score=25.0,
+        qualification_status=QualificationStatus.PARTIALLY_QUALIFIED.value,
+        full_candidate_summary="Summary",
+        skill_breakdown=[
+            SkillMatchItem(
+                skill_name="Python",
+                required_proficiency="Advanced",
+                candidate_proficiency="Advanced",
+                match_score=100.0,
+                is_matched=True,
+                skill_feedback="Matches",
+                evidence_found="Python experience",
+            )
+        ],
+        missing_critical_skills=[],
+        recommended_upskilling_path=[],
+    )
+    _, structured = build_recommendation_explanation(
+        job=job,
+        match_result=match_result,
+        score_breakdown=ScoreBreakdown(
+            match_score=25.0,
+            role_relevance_score=45.0,
+            preference_fit_score=50.0,
+            freshness_score=50.0,
+        ),
+    )
+
+    assert "Strong match" not in structured.headline
+    assert "Partial match" in structured.headline

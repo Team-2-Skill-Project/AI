@@ -13,10 +13,10 @@ from src.core.config import settings
 def test_get_llm_default():
     llm = get_llm()
     assert llm is not None
-    expected_model = settings.parse_provider_and_model()[1]
+    expected_model = settings.get_llm_settings().model_name
     actual_model = getattr(llm, "model_name", None) or getattr(llm, "model", None)
     assert actual_model == expected_model
-    assert llm.temperature == settings.LLM_TEMPERATURE
+    assert abs(llm.temperature - settings.llm.temperature) < 1e-6
 
 def test_get_llm_explicit_override():
     llm = get_llm(

@@ -47,6 +47,12 @@ class JobPosting(BaseModel):
     expires_at: Optional[Union[datetime, str]] = Field(default=None, description="Posting expiration timestamp")
     is_active: bool = Field(default=True, description="Whether the job posting is active")
     source_url: Optional[str] = Field(default=None, description="Original source listing URL")
+    salary: Optional[str] = Field(default=None, description="Raw salary text when supplied by the source")
+    source: Optional[str] = Field(default=None, description="Source provider attribution")
+    source_external_id: Optional[str] = Field(default=None, description="Identifier assigned by the source provider")
+    source_updated_at: Optional[Union[datetime, str]] = Field(default=None, description="Source update timestamp")
+    ingested_at: Optional[Union[datetime, str]] = Field(default=None, description="Timestamp when the source record was ingested")
+    description_is_partial: bool = Field(default=False, description="Whether description is only a source snippet")
     required_skills: List[SkillRequirement] = Field(default=[], description="List of required technical and domain skills")
 
 class JobRequirementsPayload(BaseModel):

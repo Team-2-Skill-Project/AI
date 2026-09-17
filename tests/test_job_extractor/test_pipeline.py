@@ -89,13 +89,12 @@ def _mock_llm_output_vague() -> dict:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _make_pipeline_with_mock(llm_response: dict) -> JobExtractionPipeline:
-    """Build a pipeline whose LLMService is mocked to return llm_response."""
+    """Build a pipeline whose canonical LLM boundary is mocked."""
     mock_llm = MagicMock()
     mock_llm.is_available.return_value = True
     mock_llm.generate_json.return_value = llm_response
     taxonomy = _make_taxonomy()
-    pipeline = JobExtractionPipeline(taxonomy_manager=taxonomy)
-    pipeline.extractor.llm_service = mock_llm
+    pipeline = JobExtractionPipeline(taxonomy_manager=taxonomy, llm=mock_llm)
     return pipeline
 
 
@@ -369,7 +368,7 @@ class TestLLMUnavailable:
 
         taxonomy = _make_taxonomy()
         pipeline = JobExtractionPipeline(taxonomy_manager=taxonomy)
-        pipeline.extractor.llm_service = mock_llm
+        pipeline.extractor.llm = mock_llm
 
         with pytest.raises(ValueError, match="LLM service is not available"):
             pipeline.extract("This is a job description with more than 50 characters of content.")

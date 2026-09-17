@@ -72,7 +72,7 @@ def _build_mock_pipeline(llm_response: dict) -> JobExtractionPipeline:
     mock_llm.generate_json.return_value = llm_response
     taxonomy = TaxonomyManager()
     pipeline = JobExtractionPipeline(taxonomy_manager=taxonomy)
-    pipeline.extractor.llm_service = mock_llm
+    pipeline.extractor.llm = mock_llm
     return pipeline
 
 
