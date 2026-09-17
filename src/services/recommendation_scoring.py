@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Deterministic scoring algorithms for Personalized Job Recommendations.
 
 Implements pure mathematical scoring functions for:
@@ -11,7 +12,7 @@ Implements pure mathematical scoring functions for:
 import math
 import re
 from datetime import datetime, timezone
-from typing import List, Optional, Any, Tuple, Set
+from typing import List, Optional, Any, Tuple, Set, Union
 
 from src.schemas.recommendation import ScoreBreakdown
 
@@ -257,7 +258,7 @@ def calculate_preference_fit(
 
 
 def calculate_freshness_score(
-    posted_at: Optional[datetime | str],
+    posted_at: Optional[Union[datetime, str]],
     now_dt: Optional[datetime] = None,
 ) -> float:
     """

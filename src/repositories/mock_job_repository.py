@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Mock Job Repository implementation backed by static seed fixtures.
 
 Used during local testing and MVP execution while the live Job Feed ingestion
@@ -9,7 +10,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 from src.repositories.job_repository import JobRepository
 from src.schemas.job import JobPosting, SkillRequirement
@@ -37,7 +38,7 @@ class MockJobRepository(JobRepository):
     Completely candidate-agnostic, supporting standard catalog queries.
     """
 
-    def __init__(self, seed_path: Optional[str | Path] = None):
+    def __init__(self, seed_path: Optional[Union[str, Path]] = None):
         if seed_path is None:
             base_dir = Path(__file__).resolve().parent.parent
             self.seed_path = base_dir / "fixtures" / "jobs_seed.json"
