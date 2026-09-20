@@ -11,3 +11,4 @@ qdrant-client>=1.19.0
 langgraph>=1.2.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
+sqlalchemy>=2.0.0
