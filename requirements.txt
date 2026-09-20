@@ -8,3 +8,6 @@ fastapi>=0.110.0
 uvicorn>=0.28.0
 python-multipart>=0.0.9
 qdrant-client>=1.19.0
+langgraph>=1.2.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
