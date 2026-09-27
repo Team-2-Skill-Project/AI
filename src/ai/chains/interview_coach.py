@@ -1,6 +1,8 @@
 from __future__ import annotations
-from typing import Optional, List, Any
-from langchain_core.language_models.chat_models import BaseChatModel
+from typing import Optional, List, Any, cast
+
+from langchain_core.language_models import BaseChatModel
+
 from langchain_core.prompts import PromptTemplate
 from src.core.llm import get_llm, truncate_to_token_limit
 from src.schemas.interview import QuestionSetResponse, AnswerEvaluationResponse
@@ -77,7 +79,11 @@ class InterviewCoachChains:
 
         active_llm = self.get_active_llm()
         question_generator = active_llm.with_structured_output(QuestionSetResponse)
-        res: QuestionSetResponse = await question_generator.ainvoke(formatted)
+        raw_res = await question_generator.ainvoke(formatted)
+        if isinstance(raw_res, dict):
+            res: QuestionSetResponse = QuestionSetResponse.model_validate(raw_res)
+        else:
+            res = cast(QuestionSetResponse, raw_res)
         res.job_id = job_id
         return res
 
@@ -105,6 +111,11 @@ class InterviewCoachChains:
 
         active_llm = self.get_active_llm()
         evaluator = active_llm.with_structured_output(AnswerEvaluationResponse)
-        res: AnswerEvaluationResponse = await evaluator.ainvoke(formatted)
+        raw_eval = await evaluator.ainvoke(formatted)
+        if isinstance(raw_eval, dict):
+            res: AnswerEvaluationResponse = AnswerEvaluationResponse.model_validate(raw_eval)
+        else:
+            res = cast(AnswerEvaluationResponse, raw_eval)
         res.question_id = question_id
         return res
+

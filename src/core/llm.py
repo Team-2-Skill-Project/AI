@@ -8,7 +8,8 @@ import re
 from typing import Any, Optional
 
 from langchain.chat_models import init_chat_model
-from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel
+
 
 from src.core.config import LLMSettings, settings
 
@@ -48,29 +49,36 @@ def parse_json_response(raw_text: str) -> dict[str, Any] | list[Any]:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
+
+    # Check markdown blocks first (both raw and trailing-comma repaired)
     for block in re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", text, flags=re.IGNORECASE):
+        clean_block = block.strip()
         try:
-            return json.loads(block.strip())
+            return json.loads(clean_block)
         except json.JSONDecodeError:
-            continue
-    decoder = json.JSONDecoder()
-    for idx in (m.start() for m in re.finditer(r"[\{\[]", text)):
+            pass
+        repaired_block = re.sub(r",\s*([\}\]])", r"\1", clean_block)
         try:
-            parsed, _ = decoder.raw_decode(text[idx:])
-            return parsed
+            return json.loads(repaired_block)
         except json.JSONDecodeError:
-            continue
+            pass
+
+    # Check whole text with trailing commas repaired
     repaired = re.sub(r",\s*([\}\]])", r"\1", text)
     try:
         return json.loads(repaired)
     except json.JSONDecodeError:
         pass
-    for idx in (m.start() for m in re.finditer(r"[\{\[]", repaired)):
-        try:
-            parsed, _ = decoder.raw_decode(repaired[idx:])
-            return parsed
-        except json.JSONDecodeError:
-            continue
+
+    decoder = json.JSONDecoder()
+    for candidate_text in (repaired, text):
+        for idx in (m.start() for m in re.finditer(r"[\{\[]", candidate_text)):
+            try:
+                parsed, _ = decoder.raw_decode(candidate_text[idx:])
+                return parsed
+            except json.JSONDecodeError:
+                continue
+
     snippet = text[:200] + ("..." if len(text) > 200 else "")
     raise ValueError(f"Failed to extract valid JSON from LLM response: {snippet}")
 

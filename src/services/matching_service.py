@@ -332,7 +332,9 @@ class MatchingService:
 
         for req in parsed_reqs:
             req_name = req.skill_name
-            req_canonical_id, _, _ = taxonomy.normalize_skill(req_name, strict=True)
+            req_canonical_id = req.skill_id
+            if not req_canonical_id:
+                req_canonical_id, _, _ = taxonomy.normalize_skill(req_name, strict=True)
 
             # Check if candidate has matching skill
             matched_entry = None

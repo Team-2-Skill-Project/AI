@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 import re
 
@@ -86,6 +87,7 @@ class TextCleaner:
         r"(\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}\b)",
         re.IGNORECASE
     )
+    BULLET_PATTERN = re.compile(r"^(?:[\u2022\u25e6\u25aa\u25cf]|[-*+])\s+")
 
     STOPWORDS = {"and", "or", "the", "of", "in", "for", "with", "to", "my", "our", "a", "an", "&"}
 
@@ -155,6 +157,10 @@ class TextCleaner:
         """
         line = line_str.strip()
         if not line or len(line) > 55 or len(line.split()) > 7:
+            return None, False
+        if cls.BULLET_PATTERN.match(line) or line.endswith((".", "!", "?")):
+            # A bullet or sentence-ending line is ordinary content even when its
+            # final word matches a section-header vocabulary term.
             return None, False
 
         if (
@@ -306,6 +312,7 @@ class TextCleaner:
                     or line_str.startswith("* ")
                     or "|" in line_str
                     or bool(cls.DATE_PATTERN.search(line_str))
+                    or bool(cls.BULLET_PATTERN.match(line_str))
                 )
 
         # Convert lists of lines back to single string per section

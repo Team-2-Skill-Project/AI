@@ -1,6 +1,8 @@
 from __future__ import annotations
 import os
 
+import pytest
+
 from src.taxonomy.taxonomy_manager import TaxonomyManager
 
 
@@ -30,24 +32,94 @@ def test_alias_resolution():
     assert py3_match is not None
     assert py3_match.skill_id == "skill_python"
 
-    # PostgreSQL -> SQL / PostgreSQL
-    pg_match = tax.find_skill("PostgreSQL")
+    # Postgres -> PostgreSQL
+    pg_match = tax.find_skill("Postgres")
     assert pg_match is not None
-    assert pg_match.skill_id in ["skill_postgresql", "skill_sql"]
+    assert pg_match.skill_id == "skill_postgresql"
+
+    js_match = tax.find_skill("JS")
+    assert js_match is not None
+    assert js_match.skill_id == "skill_javascript"
 
 
-def test_distinct_explicit_terms_are_not_collapsed_into_related_skills():
+@pytest.mark.parametrize(
+    ("raw_skill", "related_skill_id"),
+    [
+        ("OpenAI API", "skill_llms"),
+        ("GPT-4o", "skill_llms"),
+        ("GPT-4o-mini", "skill_llms"),
+        ("Prompt Engineering", "skill_llms"),
+        ("HuggingFace", "skill_transformers"),
+        ("DistilBERT", "skill_transformers"),
+        ("BERT", "skill_transformers"),
+        ("T5", "skill_transformers"),
+        ("OpenCV", "skill_computer_vision"),
+        ("Keras", "skill_tensorflow"),
+        ("Agentic AI", "skill_ai"),
+        ("Real-time Data Pipelines", "skill_kafka"),
+        ("Full Stack", "skill_mern"),
+        ("SSE", "skill_websockets"),
+        ("Vector Database", "skill_chromadb"),
+        ("XAMPP", "skill_mysql"),
+        ("GitHub", "skill_git"),
+        ("GitHub Actions", "skill_cicd"),
+        ("Docker Compose", "skill_docker"),
+        ("Firestore", "skill_firebase"),
+    ],
+)
+def test_distinct_explicit_terms_are_not_collapsed_into_related_skills(
+    raw_skill: str, related_skill_id: str,
+):
     tax = TaxonomyManager()
 
-    csharp_id, csharp_name = tax.resolve("C#")
-    dotnet_id, dotnet_name = tax.resolve(".NET")
-    alias_id, alias_name = tax.resolve("Python 3")
-    unknown_id, unknown_name = tax.resolve("Unlisted-Explicit-Tool")
+    skill_id, name = tax.resolve(raw_skill)
 
-    assert (csharp_id, csharp_name) == ("skill_csharp", "C#")
-    assert (dotnet_id, dotnet_name) != (csharp_id, csharp_name)
-    assert (alias_id, alias_name) == ("skill_python", "Python")
-    assert (unknown_id, unknown_name) == (None, "Unlisted-Explicit-Tool")
+    assert skill_id is None
+    assert name == raw_skill
+    assert skill_id != related_skill_id
+
+
+def test_open_world_resolution_preserves_unknowns_without_fake_ids():
+    tax = TaxonomyManager()
+
+    assert tax.resolve("NewsAPI") == (None, "NewsAPI")
+    assert tax.resolve("Unlisted-Explicit-Tool") == (None, "Unlisted-Explicit-Tool")
+    assert tax.normalize_skill("NewsAPI", strict=True) == (None, None, None)
+    assert tax.normalize_skill("NewsAPI", strict=False) == (None, None, None)
+
+
+def test_csharp_does_not_collapse_into_dotnet():
+    tax = TaxonomyManager()
+
+    assert tax.resolve("C#") == ("skill_csharp", "C#")
+    assert tax.resolve(".NET") == (None, ".NET")
+
+
+@pytest.mark.parametrize(
+    "raw_skill",
+    [
+        "management", "architecture", "engineering", "legal", "law", "clinical",
+        "development", "backend", "frontend", "databases",
+    ],
+)
+def test_explicit_cross_profession_terms_are_not_blacklisted(raw_skill: str):
+    tax = TaxonomyManager()
+
+    assert tax.resolve(raw_skill) == (None, raw_skill)
+
+
+@pytest.mark.parametrize(
+    "garbage",
+    [
+        "https://example.com/skills", "candidate@example.com", "Experience",
+        "developed", "2024", "---",
+    ],
+)
+def test_blacklist_still_rejects_obvious_garbage(garbage: str):
+    tax = TaxonomyManager()
+
+    assert tax.is_blacklisted(garbage, is_explicit=True)
+    assert tax.resolve(garbage) == (None, "")
 
 
 def test_unseen_skill_normalization():

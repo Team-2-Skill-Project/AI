@@ -44,7 +44,6 @@ def test_null_collection_payload_completes_through_the_llm_only_pipeline():
         def __init__(self):
             self.responses = iter([
                 {"user": {"name": "Avery"}, "raw_skills": None, "experience": None, "projects": None},
-                {"complete": True, "missing_paths": [], "unsupported_paths": []},
             ])
 
         def is_available(self):

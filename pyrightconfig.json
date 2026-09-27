@@ -1,0 +1,12 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "extraPaths": [
+    ".",
+    "D:\\ProgramData\\anaconda3\\lib\\site-packages"
+  ],
+  "pythonPath": "D:\\ProgramData\\anaconda3\\python.exe",
+  "pythonVersion": "3.9"
+}

@@ -1,0 +1,6 @@
+search-path = [
+    ".",
+    "D:/ProgramData/anaconda3/lib/site-packages"
+]
+interpreter = "D:/ProgramData/anaconda3/python.exe"
+python-version = "3.9"

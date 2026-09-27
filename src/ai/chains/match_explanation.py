@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Optional, Any
-from langchain_core.language_models.chat_models import BaseChatModel
+from typing import Optional, Any, cast
+from langchain_core.language_models import BaseChatModel
+
 from langchain_core.prompts import ChatPromptTemplate
 from src.core.llm import get_llm, truncate_to_token_limit
 from src.schemas.match import SkillGapAnalysisResponse
@@ -57,9 +58,14 @@ class MatchExplanationChain:
 
         active_llm = self.get_active_llm()
         structured_evaluator = active_llm.with_structured_output(SkillGapAnalysisResponse)
-        res: SkillGapAnalysisResponse = await structured_evaluator.ainvoke(messages)
+        raw_res = await structured_evaluator.ainvoke(messages)
+        if isinstance(raw_res, dict):
+            res: SkillGapAnalysisResponse = SkillGapAnalysisResponse.model_validate(raw_res)
+        else:
+            res = cast(SkillGapAnalysisResponse, raw_res)
 
         # Enforce consistency of root IDs
         res.job_id = job_id
         res.candidate_id = candidate_id
         return res
+

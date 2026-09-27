@@ -8,6 +8,7 @@ from src.cv_extractor.llm_extractor import LLMExtractor
 from src.cv_extractor.pipeline import CVExtractionPipeline
 from src.models.candidate import CandidateProfile
 from src.models.taxonomy import SkillTaxonomyItem
+from src.taxonomy.taxonomy_manager import TaxonomyManager
 from src.utils.url_normalizer import normalize_web_url
 
 
@@ -27,21 +28,21 @@ def _complete() -> dict:
 
 
 @pytest.mark.parametrize(
-    "skill_name",
+    ("skill_name", "expected_name"),
     [
-        "color management (CMYK)",
-        "Finite Element Analysis (FEA)",
-        "notation [A, B]",
-        "C++",
-        "C#",
-        ".NET",
-        "Node.js",
-        "Next.js",
-        "scikit-learn",
-        "CI/CD",
+        ("color management (CMYK)", "color management (CMYK)"),
+        ("Finite Element Analysis (FEA)", "Finite Element Analysis"),
+        ("notation [A, B]", "notation [A, B]"),
+        ("C++", "C++"),
+        ("C#", "C#"),
+        (".NET", ".NET"),
+        ("Node.js", "Node.js"),
+        ("Next.js", "Next.js"),
+        ("scikit-learn", "scikit-learn"),
+        ("CI/CD", "CI/CD"),
     ],
 )
-def test_raw_skill_cleanup_preserves_balanced_and_punctuation_heavy_labels(skill_name: str):
+def test_raw_skill_cleanup_preserves_balanced_and_punctuation_heavy_labels(skill_name: str, expected_name: str):
     source = f"Candidate\n{skill_name}"
     pipeline = CVExtractionPipeline(
         extractor=LLMExtractor(llm=SequencedLLM([{"raw_skills": [{"name": skill_name}]}, _complete()]))
@@ -49,7 +50,7 @@ def test_raw_skill_cleanup_preserves_balanced_and_punctuation_heavy_labels(skill
 
     candidate = pipeline.extract_from_text(source)
 
-    assert any(skill.name.lower() == skill_name.lower() for skill in candidate.candidate_skills)
+    assert any(skill.name.lower() == expected_name.lower() for skill in candidate.candidate_skills)
 
 
 def test_evidence_does_not_match_a_short_term_inside_a_longer_token():
@@ -61,6 +62,35 @@ def test_evidence_does_not_match_a_short_term_inside_a_longer_token():
     )
 
     assert evidence == []
+
+
+def test_git_taxonomy_does_not_use_github_only_text_or_urls_as_evidence():
+    taxonomy = TaxonomyManager()
+    git = taxonomy.find_skill("Git")
+
+    evidence = EvidenceLinker.link_evidence(
+        "Git",
+        git,
+        {"skills": "GitHub\nhttps://github.com/example/repository"},
+        "GitHub\nhttps://github.com/example/repository",
+    )
+
+    assert evidence == []
+
+
+def test_git_taxonomy_keeps_separate_git_evidence_when_github_also_exists():
+    taxonomy = TaxonomyManager()
+    git = taxonomy.find_skill("Git")
+
+    evidence = EvidenceLinker.link_evidence(
+        "Git",
+        git,
+        {"skills": "Git\nGitHub\nhttps://github.com/example/repository"},
+        "Git\nGitHub\nhttps://github.com/example/repository",
+    )
+
+    assert len(evidence) == 1
+    assert evidence[0].text == "Git"
 
 
 @pytest.mark.parametrize("skill_name", ["C++", "C#", ".NET", "Node.js", "Next.js", "scikit-learn", "CI/CD"])

@@ -30,7 +30,7 @@ class NormalizedSkill(BaseModel):
 
     skill_id: str | None = Field(
         None,
-        description="Canonical skill_id from TaxonomyManager; None if not found",
+        description="Stable taxonomy or Skill Registry ID; None for taxonomy-only callers",
     )
     canonical_name: str = Field(..., description="Canonical display name")
     category: str | None = Field(None, description="Taxonomy category (e.g. 'Frameworks')")

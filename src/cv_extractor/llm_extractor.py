@@ -3,14 +3,44 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+import types
+from dataclasses import dataclass
+from typing import Any, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.llm import get_llm, parse_json_response
-from src.models import CVExtractionSchema
+from src.models import CVExtractionSchema, normalize_backend_date
 
 logger = logging.getLogger(__name__)
+
+
+def _canonicalize_schema_path(path: str) -> str:
+    """Normalize dotted list indices without interpreting field names."""
+    return re.sub(r"(?<=\w)\.(\d+)(?=\.|$)", r"[\1]", path)
+
+
+class ValidationFinding(BaseModel):
+    """Internal semantic finding returned by the source-fidelity reviewer."""
+
+    kind: str
+    path: str
+    reason: str | None = None
+    source_evidence: str | None = None
+    expected_path: str | None = None
+
+    @field_validator("path", "expected_path", mode="before")
+    @classmethod
+    def canonicalize_path(cls, value):
+        if value is None:
+            return None
+        return _canonicalize_schema_path(str(value))
+
+
+@dataclass(frozen=True)
+class GuardOutcome:
+    validation: "CoverageValidationResult"
+    rejected: tuple[tuple[ValidationFinding, str], ...] = ()
 
 
 class CVExtractionError(Exception):
@@ -21,7 +51,7 @@ class CVExtractionError(Exception):
 
 
 class CVExtractionIncompleteError(CVExtractionError):
-    """The LLM completed both allowed attempts without faithfully covering the CV."""
+    """Legacy offline source-fidelity failure; production extraction does not raise it."""
 
     public_message = "The CV could not be extracted reliably. Please try again later."
 
@@ -34,11 +64,12 @@ class CoverageValidationResult(BaseModel):
     unsupported_paths: list[str] = Field(default_factory=list)
     fidelity_paths: list[str] = Field(default_factory=list)
     finding_reasons: dict[str, str] = Field(default_factory=dict)
+    findings: list[ValidationFinding] = Field(default_factory=list)
 
     @staticmethod
     def _canonicalize_path(path: str) -> str:
         """Normalize generic dotted list indices without interpreting the field name."""
-        return re.sub(r"(?<=\w)\.(\d+)(?=\.|$)", r"[\1]", path)
+        return _canonicalize_schema_path(path)
 
     @model_validator(mode="after")
     def canonicalize_paths(self) -> CoverageValidationResult:
@@ -50,6 +81,185 @@ class CoverageValidationResult(BaseModel):
             for path, reason in self.finding_reasons.items()
         }
         return self
+
+
+class DeterministicValidationGuard:
+    """Enforce schema contracts around semantic LLM validation findings."""
+
+    _SOURCE_DATE_PATTERNS = (
+        re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),
+        re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b"),
+        re.compile(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b"),
+        re.compile(r"\b[A-Za-z]+\s+\d{1,2},?\s+\d{4}\b"),
+        re.compile(r"\b\d{4}-\d{2}\b"),
+        re.compile(r"\b(?:[A-Za-z]+)\s+\d{4}\b"),
+        re.compile(r"\b\d{4}\b"),
+    )
+
+    @staticmethod
+    def _unwrap(annotation: Any) -> Any:
+        origin = get_origin(annotation)
+        if origin in (Union, types.UnionType):
+            non_null = [item for item in get_args(annotation) if item is not type(None)]
+            return non_null[0] if len(non_null) == 1 else annotation
+        return annotation
+
+    @classmethod
+    def _resolve_path(cls, path: str) -> tuple[bool, Any, Any, Any]:
+        """Return (exists, final field, final annotation, collection annotation)."""
+        current_type: Any = CVExtractionSchema
+        final_field = None
+        final_annotation = None
+        collection_annotation = None
+
+        for segment in _canonicalize_schema_path(path).split("."):
+            match = re.fullmatch(r"([A-Za-z_]\w*)(?:\[(\d+)\])?", segment)
+            if not match or not hasattr(current_type, "model_fields"):
+                return False, None, None, None
+
+            field_name, index = match.group(1), match.group(2)
+            field = current_type.model_fields.get(field_name)
+            if field is None:
+                return False, None, None, None
+
+            final_field = field
+            final_annotation = field.annotation
+            unwrapped = cls._unwrap(final_annotation)
+            if index is not None:
+                if get_origin(unwrapped) not in (list, tuple, set):
+                    return False, None, None, None
+                collection_annotation = unwrapped
+                item_types = get_args(unwrapped)
+                current_type = cls._unwrap(item_types[0]) if item_types else Any
+            else:
+                current_type = unwrapped
+
+        return True, final_field, final_annotation, collection_annotation
+
+    @classmethod
+    def _value_at_path(cls, extraction: CVExtractionSchema, path: str) -> Any:
+        value: Any = extraction.model_dump()
+        for segment in _canonicalize_schema_path(path).split("."):
+            match = re.fullmatch(r"([A-Za-z_]\w*)(?:\[(\d+)\])?", segment)
+            if not match or not isinstance(value, dict):
+                return None
+            value = value.get(match.group(1))
+            if match.group(2) is not None:
+                if not isinstance(value, list):
+                    return None
+                index = int(match.group(2))
+                value = value[index] if index < len(value) else None
+        return value
+
+    @staticmethod
+    def _is_nullable(annotation: Any, field: Any) -> bool:
+        origin = get_origin(annotation)
+        if origin in (Union, types.UnionType) and type(None) in get_args(annotation):
+            return True
+        return getattr(field, "default", None) is None
+
+    @staticmethod
+    def _is_date_contract(field: Any) -> bool:
+        description = getattr(field, "description", "") or ""
+        return "YYYY-MM-DD" in description
+
+    @staticmethod
+    def _is_grounded(source_evidence: str | None, source_text: str) -> bool:
+        if not source_evidence or not source_evidence.strip():
+            return False
+
+        def normalize(value: str) -> str:
+            return " ".join(value.casefold().split())
+
+        return normalize(source_evidence) in normalize(source_text)
+
+    @classmethod
+    def _contains_source_supported_date(cls, text: str) -> bool:
+        for pattern in cls._SOURCE_DATE_PATTERNS:
+            for match in pattern.finditer(text):
+                if normalize_backend_date(match.group(0)) is not None:
+                    return True
+        return False
+
+    @classmethod
+    def _legacy_findings(cls, validation: CoverageValidationResult) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = list(validation.findings)
+        known = {(item.kind, item.path) for item in findings}
+        for kind, paths in (
+            ("missing", validation.missing_paths),
+            ("unsupported", validation.unsupported_paths),
+            ("fidelity", validation.fidelity_paths),
+        ):
+            for path in paths:
+                canonical = _canonicalize_schema_path(path)
+                if (kind, canonical) not in known:
+                    findings.append(
+                        ValidationFinding(
+                            kind=kind,
+                            path=canonical,
+                            reason=validation.finding_reasons.get(canonical),
+                        )
+                    )
+        return findings
+
+    @classmethod
+    def apply(
+        cls,
+        source_text: str,
+        extraction: CVExtractionSchema,
+        validation: CoverageValidationResult,
+    ) -> GuardOutcome:
+        accepted: list[ValidationFinding] = []
+        rejected: list[tuple[ValidationFinding, str]] = []
+        structured_findings = bool(validation.findings)
+
+        for finding in cls._legacy_findings(validation):
+            path = _canonicalize_schema_path(finding.path)
+            exists, field, annotation, collection_annotation = cls._resolve_path(path)
+            if not exists:
+                rejected.append((finding, "schema path does not exist"))
+                continue
+
+            if finding.expected_path and not cls._resolve_path(finding.expected_path)[0]:
+                rejected.append((finding, "expected schema path does not exist"))
+                continue
+
+            if structured_findings and not cls._is_grounded(finding.source_evidence, source_text):
+                rejected.append((finding, "structured finding source evidence is not grounded in source"))
+                continue
+
+            if finding.kind in {"wrong_field", "misplaced", "wrong_placement"} and not finding.expected_path:
+                rejected.append((finding, "wrong-field finding has no valid expected schema path"))
+                continue
+
+            value = cls._value_at_path(extraction, path)
+            if finding.kind == "missing":
+                is_collection = get_origin(cls._unwrap(annotation)) in (list, tuple, set)
+                if value not in (None, []) and not is_collection:
+                    rejected.append((finding, "extraction already contains a value at this path"))
+                    continue
+                evidence = finding.source_evidence or source_text
+                if value is None and cls._is_date_contract(field) and not cls._contains_source_supported_date(evidence):
+                    rejected.append((finding, "date null is valid when source provides no date"))
+                    continue
+                if value is None and not cls._is_nullable(annotation, field):
+                    rejected.append((finding, "null is not valid for this schema field"))
+                    continue
+                if value in (None, []) and structured_findings and not finding.source_evidence:
+                    rejected.append((finding, "missing finding has no grounded source evidence"))
+                    continue
+
+            accepted.append(finding)
+
+        accepted_result = CoverageValidationResult(
+            complete=not accepted,
+            missing_paths=[item.path for item in accepted if item.kind == "missing"],
+            unsupported_paths=[item.path for item in accepted if item.kind == "unsupported"],
+            fidelity_paths=[item.path for item in accepted if item.kind == "fidelity"],
+            finding_reasons={item.path: item.reason for item in accepted if item.reason},
+            findings=accepted,
+        )
+        return GuardOutcome(accepted_result, tuple(rejected))
 
 
 class ExtractionResult(dict):
@@ -73,17 +283,47 @@ the source supports; leave a field null or empty only when the source does not s
 Preserve explicit values faithfully, do not infer or fabricate facts, and return only JSON
 matching the supplied schema.
 
-Date precision is strict: populate a YYYY-MM-DD field only when the source explicitly
-states that exact day-level date. A month/year or year-only value must be null; never invent
-a day, month boundary, or date component. A current-status boolean may still reflect explicit
-current/ongoing language (true) or an explicitly ended range (false) even when dates are null.
+Preserve source date precision: emit YYYY-MM-DD only when the source explicitly states a day;
+emit YYYY-MM for a month/year source date and YYYY for a year-only source date. Never invent a
+day, month boundary, or date component. A current-status boolean may still reflect explicit
+current/ongoing language (true) or an explicitly ended range (false) even when an end date is null.
 
 Keep each value in its semantically matching schema field. In particular, an employer name
 contains only the organization name; do not append workplace location or address when the
 schema provides no field for it. Extract explicit preferences into preferences, but never
 infer preferences from other CV facts. When a source explicitly associates a proficiency
 qualifier with a skill and raw_skills can represent it, preserve that qualifier; otherwise
-leave raw_skills proficiency null."""
+leave raw_skills proficiency null. For education, field_of_study is the primary major;
+place a separately stated minor, thesis, or honor in description only when it adds distinct
+information, and do not repeat the same fact in both fields. target_roles represents explicit
+desired roles or career tracks; do not infer it from a current or past job_title.
+
+Technology and skill completeness is required, without inference. Before finalizing, perform one
+internal coverage sweep without adding inferred facts: scan the
+structured Skills lists; every experience description; every project description; and explicit
+tools, technologies, methodologies, and professional capabilities in the summary or certificates.
+For each explicit reusable language, framework, library, tool, platform, API, database, model,
+protocol, standard, methodology, or professional skill, populate the relevant record-level
+technologies and raw_skills. Project and experience technologies are not limited to a heading or
+labeled list: include explicitly named items in the record description too. Do not use taxonomy as a whitelist
+and do not add technologies merely because they are commonly used for a project type.
+
+Skill precision is equally required. Add a raw skill only when the source presents it as a reusable
+skill, technology, tool, platform, method, or professional capability. Do not turn candidate-created
+components or products, datasets, outputs, artifacts, business results, company names, URLs, section
+labels, sentence fragments, or contextual noun phrases into standalone skills. Do not list a
+technology mentioned only as a comparison, alternative, or benchmark unless the source also states
+the candidate used it. In phrases such as "Adobe Photoshop for ad creatives", include Adobe Photoshop
+but not "ad creatives" unless that phrase is independently presented as a skill. Treat qualifiers
+after "for", "used to", "applied to", or "supporting" as context unless the qualified phrase is
+separately identified as a skill. When a source states Full Name (ACRONYM), use the full name as the
+skill and preserve the acronym as its source-declared alternate mention.
+
+For projects, use start_date and end_date only for an explicit date range. A single unlabeled project
+date belongs in project_date and must not be assumed to be either a start or an end date. For
+certificates, preserve an explicitly stated status. Distinguish a certificate issuer from a learning
+or delivery platform: a parenthetical platform is platform, not issuing_organization, unless the
+source explicitly identifies it as the issuer."""
 
     COVERAGE_SYSTEM_PROMPT = """You perform a source-fidelity validation of a structured CV extraction
 against the supplied source and extraction schema. Evaluate only information the schema can
@@ -94,7 +334,8 @@ Report every explicit source-supported omission in missing_paths. Report every v
 from or contradicted by the source in unsupported_paths. Report materially altered explicit
 values, incorrect semantic field placement, and date-precision inflation in fidelity_paths.
 A YYYY-MM-DD value is precision inflation unless the source explicitly supplies its day-level
-date; a month/year or year-only source date must correspond to null. An employer-name field
+date; a month/year source date must correspond to YYYY-MM and a year-only source date must
+correspond to YYYY. An employer-name field
 must not contain a workplace location or address when the schema has no experience-location
 field. Explicit preferences and skill proficiency qualifiers must be preserved when their
 schema fields support them.
@@ -105,10 +346,12 @@ source-supported value is correctly null, not missing. A collection with no sour
 records is correctly empty, not missing. Apply these rules generically to every nullable field
 and collection. Use bracket list-index paths consistently, for example records[0].field.
 For every reported path, include a concise category reason in finding_reasons without quoting
-source text or candidate values.
+source text or candidate values. Also return each report as a structured finding with kind,
+path, reason, and a short exact source_evidence snippet. Use expected_path only when claiming
+that a value belongs in another schema field; that path must exist in the supplied schema.
 
-Mark complete true only when all three path lists are empty. Return only JSON matching the
-supplied validation-result schema."""
+Mark complete true only when all three path lists and the structured findings list are empty.
+Return only JSON matching the supplied validation-result schema."""
 
     def __init__(self, llm: Any = None):
         # Injection is for tests; production construction always resolves get_llm().
@@ -178,6 +421,7 @@ supplied validation-result schema."""
         active_llm: Any,
         source_text: str,
         corrective_paths: list[str] | None = None,
+        document_urls: list[str] | None = None,
     ) -> CVExtractionSchema:
         schema_contract = self._schema_contract(CVExtractionSchema)
         corrective_instruction = ""
@@ -187,12 +431,19 @@ supplied validation-result schema."""
                 "The following schema paths may need attention, but source evidence remains the only truth:\n"
                 + json.dumps(corrective_paths, ensure_ascii=False)
             )
+        annotation_context = ""
+        if document_urls:
+            annotation_context = (
+                "\n\nDOCUMENT HYPERLINKS (source annotations):\n"
+                + json.dumps(document_urls, ensure_ascii=False)
+            )
         prompt = (
             "SOURCE CV (normalized, complete):\n"
             f"{source_text}\n\n"
             "EXTRACTION SCHEMA (JSON Schema):\n"
             f"{schema_contract}"
             f"{corrective_instruction}"
+            f"{annotation_context}"
         )
         logger.info("CV source chars=%d CV extraction prompt chars=%d", len(source_text), len(prompt))
         try:
@@ -216,6 +467,7 @@ supplied validation-result schema."""
         source_text: str,
         extraction: CVExtractionSchema,
     ) -> CoverageValidationResult:
+        """Run the optional semantic reviewer for diagnostics/offline evaluation only."""
         schema_contract = self._schema_contract(CVExtractionSchema)
         result_contract = self._schema_contract(CoverageValidationResult)
         prompt = (
@@ -236,10 +488,19 @@ supplied validation-result schema."""
                 self.COVERAGE_SYSTEM_PROMPT,
                 CoverageValidationResult,
             )
-            validation = CoverageValidationResult.model_validate(raw_result)
+            raw_validation = CoverageValidationResult.model_validate(raw_result)
         except Exception as exc:
             logger.warning("Centralized LLM coverage validation failed: %s", type(exc).__name__)
             raise CVExtractionError("Centralized LLM coverage validation failed") from exc
+
+        guarded = DeterministicValidationGuard.apply(source_text, extraction, raw_validation)
+        for finding, reason in guarded.rejected:
+            logger.warning(
+                "CV source-fidelity finding rejected by deterministic guard: path=%s reason=%s",
+                finding.path,
+                reason,
+            )
+        validation = guarded.validation
 
         logger.info(
             "CV source-fidelity validation complete=%s missing_paths=%d unsupported_paths=%d fidelity_paths=%d",
@@ -265,42 +526,27 @@ supplied validation-result schema."""
         sections: dict[str, str] | None = None,
         document_urls: list[str] | None = None,
     ) -> ExtractionResult:
-        """Extract, validate coverage, then make exactly one corrective LLM retry if needed."""
-        del sections, document_urls  # Semantic interpretation belongs to the LLM; state is request-local.
+        """Extract through the centralized LLM, retrying once only for technical failure."""
+        del sections  # Semantic interpretation belongs to the LLM; state is request-local.
         if not full_text or not full_text.strip():
             raise ValueError("CV text cannot be empty")
 
         active_llm = self._get_active_llm()
-        first = self._extract_once(active_llm, full_text)
-        first_validation = self._validate_coverage(active_llm, full_text, first)
-        if self._is_faithful(first_validation):
-            logger.info("Successfully extracted, schema-validated, and coverage-validated CV entities using centralized LLM service.")
-            return ExtractionResult(first.model_dump())
+        try:
+            extraction = self._extract_once(active_llm, full_text, document_urls=document_urls)
+        except CVExtractionError as first_error:
+            logger.warning(
+                "Centralized CV extraction failed; retrying once without semantic coverage validation: %s",
+                type(first_error).__name__,
+            )
+            try:
+                extraction = self._extract_once(active_llm, full_text, document_urls=document_urls)
+            except CVExtractionError as retry_error:
+                logger.error("Centralized CV extraction failed after one retry: %s", type(retry_error).__name__)
+                raise retry_error from first_error
 
-        corrective_paths = self._corrective_paths(first_validation)
-        corrective_reasons = {
-            path: validation_reason
-            for path, validation_reason in first_validation.finding_reasons.items()
-            if path in corrective_paths
-        }
-        logger.warning(
-            "CV source-fidelity corrective retry findings=%s finding_reasons=%s",
-            corrective_paths,
-            corrective_reasons,
-        )
-        retry = self._extract_once(active_llm, full_text, corrective_paths)
-        retry_validation = self._validate_coverage(active_llm, full_text, retry)
-        if self._is_faithful(retry_validation):
-            logger.info("Successfully extracted CV entities after one coverage-corrective centralized LLM retry.")
-            return ExtractionResult(retry.model_dump())
-
-        logger.warning(
-            "CV extraction remained unfaithful after its single corrective retry: missing_paths=%d unsupported_paths=%d fidelity_paths=%d",
-            len(retry_validation.missing_paths),
-            len(retry_validation.unsupported_paths),
-            len(retry_validation.fidelity_paths),
-        )
-        raise CVExtractionIncompleteError("Coverage validation remained incomplete")
+        logger.info("Successfully extracted and schema-validated CV entities using centralized LLM service.")
+        return ExtractionResult(extraction.model_dump())
 
     @staticmethod
     def _is_faithful(validation: CoverageValidationResult) -> bool:
@@ -309,6 +555,7 @@ supplied validation-result schema."""
             and not validation.missing_paths
             and not validation.unsupported_paths
             and not validation.fidelity_paths
+            and not validation.findings
         )
 
     @staticmethod
@@ -318,4 +565,5 @@ supplied validation-result schema."""
             validation.missing_paths
             + validation.unsupported_paths
             + validation.fidelity_paths
+            + [finding.path for finding in validation.findings]
         ))

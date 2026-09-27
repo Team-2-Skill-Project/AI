@@ -10,6 +10,7 @@ Step 3 — Score:      Heuristic confidence score based on extraction completene
 import logging
 
 from src.taxonomy.taxonomy_manager import TaxonomyManager
+from src.taxonomy.skill_registry_resolver import SkillRegistryResolver
 
 from .llm_extractor import JobLLMExtractor
 from .models import JobRequirementProfile, NormalizedSkill
@@ -30,8 +31,10 @@ class JobExtractionPipeline:
         self,
         taxonomy_manager: TaxonomyManager | None = None,
         llm=None,
+        skill_registry_resolver: SkillRegistryResolver | None = None,
     ):
         self.taxonomy = taxonomy_manager or TaxonomyManager()
+        self.skill_registry = skill_registry_resolver
         self.extractor = JobLLMExtractor(llm=llm)
 
     # ------------------------------------------------------------------
@@ -60,10 +63,10 @@ class JobExtractionPipeline:
 
         # ── Step 2: Skill normalization ─────────────────────────────────
         required_skills = normalize_skills(
-            raw.get("required_skills", []), self.taxonomy
+            raw.get("required_skills", []), self.taxonomy, self.skill_registry
         )
         preferred_skills = normalize_skills(
-            raw.get("preferred_skills", []), self.taxonomy
+            raw.get("preferred_skills", []), self.taxonomy, self.skill_registry
         )
         logger.debug(
             "Step 2 complete — %d required, %d preferred skills normalized",

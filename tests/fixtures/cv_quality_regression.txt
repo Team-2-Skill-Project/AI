@@ -1,0 +1,19 @@
+Avery Example
+avery@example.test | LinkedIn | GitHub
+
+Education:
+Example University
+Bachelor of Computing, Minor in Applied Systems Oct 2023 - Jun 2027
+
+Projects
+TruthStream Platform | Python, NewsAPI, GNews, FastAPI May 2026
+• Built a streaming analysis service using NewsAPI and GNews.
+• Designed an offline evaluation workflow to manage session history.
+
+Customer Insight Tool | Python, joblib, LIME, Plotly May 2025
+• Built a dashboard using Plotly and explicit unknown tool WidgetFlow.
+
+Technical Skills
+Languages: Python, SQL
+Frameworks: FastAPI
+Tools: NewsAPI, GNews, joblib, LIME, Plotly, WidgetFlow

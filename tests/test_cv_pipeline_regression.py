@@ -198,27 +198,27 @@ def test_distinct_explicit_skill_never_resolves_to_an_unrelated_canonical_skill(
     assert (skill.skill_id, skill.name) != ("skill_csharp", "C#")
 
 
-def test_pipeline_retries_once_and_never_returns_a_candidate_after_provider_failure():
-    first = {"user": {"name": "Avery"}}
+def test_pipeline_retries_once_only_after_technical_extraction_failure():
     corrected = {"user": {"name": "Avery"}, "raw_skills": [{"name": "Tool-Alpha"}]}
     pipeline, llm = _pipeline([
-        first,
-        {"complete": False, "missing_paths": ["raw_skills"], "unsupported_paths": []},
+        RuntimeError("structured extraction failed"),
         corrected,
-        _complete(),
     ])
 
     candidate = pipeline.extract_from_text("Avery\nTool-Alpha")
 
     assert candidate.user.name == "Avery"
-    assert llm.calls == 4
+    assert llm.calls == 2
 
-    failed_pipeline, _ = _pipeline([RuntimeError("provider unavailable")])
+    failed_pipeline, _ = _pipeline([
+        RuntimeError("provider unavailable"),
+        RuntimeError("provider unavailable"),
+    ])
     with pytest.raises(CVExtractionError):
         failed_pipeline.extract_from_text("Avery")
 
 
-def test_source_fidelity_findings_trigger_the_single_corrective_retry():
+def test_source_fidelity_disagreement_cannot_trigger_a_corrective_retry():
     initial = {
         "experiences": [{
             "job_title": "Builder",
@@ -228,33 +228,16 @@ def test_source_fidelity_findings_trigger_the_single_corrective_retry():
             "is_current": True,
         }],
     }
-    corrected = {
-        "experiences": [{
-            "job_title": "Builder",
-            "company_name": "Origin Ltd",
-            "start_date": None,
-            "end_date": None,
-            "is_current": True,
-        }],
-    }
     pipeline, llm = _pipeline([
         initial,
-        {
-            "complete": False,
-            "missing_paths": [],
-            "unsupported_paths": [],
-            "fidelity_paths": ["experiences[0].company_name", "experiences[0].start_date"],
-        },
-        corrected,
-        _complete(),
     ])
 
     candidate = pipeline.extract_from_text("Builder — Origin Ltd, Example City\nJune 2021 - Present")
 
-    assert candidate.experiences[0].company_name == "Origin Ltd"
-    assert candidate.experiences[0].start_date is None
+    assert candidate.experiences[0].company_name == "Origin Ltd, Example City"
+    assert candidate.experiences[0].start_date == "2021-06-30"
     assert candidate.experiences[0].is_current is True
-    assert llm.calls == 4
+    assert llm.calls == 1
 
 
 def test_shared_pipeline_keeps_concurrent_request_results_isolated():

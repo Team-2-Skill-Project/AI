@@ -82,6 +82,7 @@ class DatabaseJobRepository(JobRepository):
                 continue
             requirements.append(
                 SkillRequirement(
+                    skill_id=item.get("skill_id"),
                     skill_name=str(name),
                     proficiency=str(item.get("proficiency") or item.get("required_level") or "Intermediate"),
                     is_critical=bool(item.get("is_critical")) or item.get("importance") == "critical",

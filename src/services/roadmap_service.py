@@ -1,7 +1,8 @@
 from __future__ import annotations
 import re
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+
 from typing import Optional
 from sqlalchemy.orm import Session
 # pyrefly: ignore [missing-import]
@@ -106,10 +107,11 @@ class RoadmapService:
                                 link = ResourceLinkSchema(
                                     type="video",
                                     url=f"https://www.youtube.com/watch?v={res.video_id}",
-                                    title=res.title,
-                                    thumbnail_url=res.thumbnail_url,
-                                    video_id=res.video_id,
+                                    title=str(res.title),
+                                    thumbnail_url=str(res.thumbnail_url) if res.thumbnail_url else None,
+                                    video_id=str(res.video_id),
                                 )
+
                                 if not any(existing.url == link.url for existing in task.resource_links):
                                     task.resource_links.append(link)
                         else:
@@ -132,9 +134,9 @@ class RoadmapService:
                                     existing_res = session.query(SkillResourceModel).filter(
                                         SkillResourceModel.video_id == item["video_id"]
                                     ).first()
-                                    if not existing_res:
+                                    if not existing_res and skill_id:
                                         new_res = SkillResourceModel(
-                                            skill_id=skill_id or f"skill_{abs(hash(gap_query)) % 1000000}",
+                                            skill_id=skill_id,
                                             video_id=item["video_id"],
                                             title=item["title"],
                                             channel_name=item.get("channel_name", "YouTube"),
@@ -188,7 +190,8 @@ class RoadmapService:
             if not task_found:
                 raise ValueError(f"Task '{task_id}' not found in candidate roadmap.")
 
-            roadmap.updated_at = datetime.utcnow().isoformat()
+            roadmap.updated_at = datetime.now(timezone.utc).isoformat()
+
             repo.save_roadmap(roadmap)
             return roadmap
         finally:
