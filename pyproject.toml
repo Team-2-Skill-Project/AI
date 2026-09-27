@@ -19,15 +19,15 @@ python_files = ["test_*.py"]
 asyncio_mode = "auto"
 
 [tool.pyright]
-extraPaths = [".", "D:/ProgramData/anaconda3/lib/site-packages"]
+extraPaths = ["src", "D:/ProgramData/anaconda3/lib/site-packages"]
 pythonPath = "D:/ProgramData/anaconda3/python.exe"
 
 [tool.pyrefly]
+python-interpreter-path = "D:/ProgramData/anaconda3/python.exe"
 search-path = [
-    ".",
+    "src",
     "D:/ProgramData/anaconda3/lib/site-packages"
 ]
-python-version = "3.9"
-interpreter = "D:/ProgramData/anaconda3/python.exe"
+
 
 
