@@ -180,6 +180,11 @@ class Settings(BaseModel):
     enable_api_key_auth: bool = False
     rate_limit_per_minute: int = Field(default=60, ge=1)
     enable_rate_limiting: bool = True
+    cors_allowed_methods: list[str] = Field(default_factory=lambda: ["GET", "POST", "OPTIONS"])
+    cors_allowed_headers: list[str] = Field(
+        default_factory=lambda: ["Content-Type", "Authorization", "X-API-Key", "Accept"]
+    )
+    cors_allow_credentials: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -229,6 +234,9 @@ class Settings(BaseModel):
         cors_origins = origins or cls().CORS_ORIGINS
         cors_methods = methods or getattr(cls(), "CORS_ALLOWED_METHODS", ["GET", "POST", "OPTIONS"])
         cors_headers = headers or getattr(cls(), "CORS_ALLOWED_HEADERS", ["Content-Type", "Authorization", "X-API-Key", "Accept"])
+        cors_allow_credentials = env_bool("CORS_ALLOW_CREDENTIALS", True)
+        if cors_origins and "*" in cors_origins:
+            cors_allow_credentials = False
 
         return cls(
             PROJECT_NAME=env("PROJECT_NAME", "SkillMatch AI Services"),
@@ -254,6 +262,13 @@ class Settings(BaseModel):
             LOG_LEVEL=env("LOG_LEVEL", "INFO") or "INFO",
             TAXONOMY_PATH=resolve_taxonomy_path(env("TAXONOMY_PATH")) if env("TAXONOMY_PATH") else resolve_taxonomy_path(),
             taxonomy_path=resolve_taxonomy_path(env("TAXONOMY_PATH")) if env("TAXONOMY_PATH") else resolve_taxonomy_path(),
+            api_key=api_key,
+            enable_api_key_auth=enable_api_key_auth,
+            rate_limit_per_minute=rate_limit_requests,
+            enable_rate_limiting=rate_limit_enabled,
+            cors_allowed_methods=cors_methods,
+            cors_allowed_headers=cors_headers,
+            cors_allow_credentials=cors_allow_credentials,
         )
 
 
@@ -302,27 +317,6 @@ def get_llm_settings() -> LLMSettings:
     return settings.get_llm_settings()
 
 
-@lru_cache
-def get_app_settings() -> AppSettings:
-    """Return the original CV API settings object."""
-    raw_taxonomy = os.getenv("TAXONOMY_PATH", "")
-    origins_raw = os.getenv("CORS_ALLOWED_ORIGINS", "")
-    origins = [item.strip() for item in origins_raw.split(",") if item.strip()] if origins_raw else AppSettings().cors_allowed_origins
-    allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() in {"true", "1", "yes", "on"}
-    if "*" in origins:
-        allow_credentials = False
-
-    return AppSettings(
-        host=os.getenv("API_HOST", "127.0.0.1"),
-        port=int(os.getenv("API_PORT", "8001")),
-        environment=os.getenv("ENVIRONMENT", "development"),
-        taxonomy_path=resolve_taxonomy_path(raw_taxonomy) if raw_taxonomy else resolve_taxonomy_path(),
-        cors_allowed_origins=origins,
-        cors_allowed_methods=[m.strip().upper() for m in os.getenv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS").split(",") if m.strip()],
-        cors_allowed_headers=[h.strip() for h in os.getenv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-API-Key,Accept").split(",") if h.strip()],
-        cors_allow_credentials=allow_credentials,
-        api_key=os.getenv("SERVICE_API_KEY") or os.getenv("API_KEY") or None,
-        enable_api_key_auth=os.getenv("ENABLE_API_KEY_AUTH", "false").lower() in {"true", "1", "yes", "on"},
-        rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
-        enable_rate_limiting=os.getenv("ENABLE_RATE_LIMITING", "true").lower() in {"true", "1", "yes", "on"},
-    )
+def get_app_settings() -> Settings:
+    """Return the unified application settings singleton (backward-compatibility alias)."""
+    return settings

@@ -1,10 +1,12 @@
 from __future__ import annotations
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+
 from typing import Any, List, Optional
-from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
+
 from src.core.llm import get_llm, parse_json_response
 from src.schemas.roadmap import (
     RoadmapMilestone,
@@ -157,8 +159,9 @@ class RoadmapGenerationChain:
             roadmap.candidate_id = candidate_id
             roadmap.target_role = target_role
             roadmap.role_family = effective_family
-            roadmap.created_at = datetime.utcnow().isoformat()
-            roadmap.updated_at = datetime.utcnow().isoformat()
+            roadmap.created_at = datetime.now(timezone.utc).isoformat()
+            roadmap.updated_at = datetime.now(timezone.utc).isoformat()
+
             roadmap.generation_source = "llm"
             return roadmap
         except Exception as exc:
@@ -239,6 +242,7 @@ class RoadmapGenerationChain:
             phases=phases,
             total_weeks=max(total_weeks, 2),
             generation_source="deterministic_fallback",
-            created_at=datetime.utcnow().isoformat(),
-            updated_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
         )
+

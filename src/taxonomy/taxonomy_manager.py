@@ -10,7 +10,10 @@ from ..models.taxonomy import SkillTaxonomyItem
 logger = logging.getLogger(__name__)
 
 
-# Blacklist of common stopwords, noise words, URLs, and generic non-skill tokens
+# Terms that are never meaningful standalone skills.  This intentionally excludes
+# cross-profession terms (for example, management, law, clinical, backend, and
+# architecture): when the LLM explicitly extracts those labels, they are kept as
+# open-world skills unless the label itself is structural noise.
 STOPWORDS_BLACKLIST = {
     # English articles, prepositions, conjunctions, pronouns
     "a", "an", "the", "and", "or", "in", "on", "at", "to", "for", "with", "by", "from",
@@ -26,33 +29,26 @@ STOPWORDS_BLACKLIST = {
     "selected", "specializing", "focus", "focusing", "collaborated", "architected",
     "sophisticated", "accurate", "comprehensive", "intelligent", "high", "low", "real",
 
-    # Generic business and resume headers
-    "system", "systems", "features", "processes", "platform", "platforms", "projects",
-    "project", "experience", "education", "skills", "certifications", "summary",
+    # Resume headers and structural labels
+    "experience", "education", "skills", "certifications", "summary",
     "overview", "tools", "languages", "frameworks", "technologies", "responsibilities",
-    "activities", "courses", "coursework", "management", "lifecycle", "architecture",
-    "solutions", "workflows", "ecosystems", "decision", "decisions", "choices",
-    "document", "documents", "archiving", "notifications", "judicial", "legal",
-    "law", "firm", "health", "clinical", "patient", "nutritionists", "saudi", "arabia",
-    "egypt", "cairo", "mansoura", "live", "ar", "en", "stack", "fullstack", "full",
-    "backend", "frontend", "engineering", "programming", "databases", "development",
+    "activities", "courses", "coursework",
 
     # Noise and punctuation residues
     "etc", "eg", "ie", "nan", "null", "none", "true", "false", "string", "item", "items"
 }
 
 
-LEGITIMATE_EXPLICIT_SKILLS = {
-    "backend", "frontend", "fullstack", "architecture", "management",
-    "engineering", "programming", "databases", "development",
-    "system", "systems", "platform", "platforms", "solutions", "workflows", "lifecycle"
-}
+# Retained as a public compatibility export for callers that import it.  Generic
+# professional terms are not blacklisted; explicit extraction preserves them.
+LEGITIMATE_EXPLICIT_SKILLS: frozenset[str] = frozenset()
 
 
 class TaxonomyManager:
     """
     Manages canonical skills taxonomy, aliases, and normalizations for SkillMatch.
-    Ensures all extracted skills map strictly to standard skill IDs and filters out garbage noise.
+    Resolves known name-level aliases and filters structural noise while preserving
+    unknown explicit skills without assigning a taxonomy ID.
     """
 
     def __init__(self, seed_file_path: str | Path | None = None):
@@ -143,7 +139,7 @@ class TaxonomyManager:
         return cleaned
 
     def is_blacklisted(self, raw_name: str, is_explicit: bool = False) -> bool:
-        """Checks if a string is a stopword, URL, email, punctuation noise, or purely numerical."""
+        """Checks structural noise; ``is_explicit`` is retained for caller compatibility."""
         if not raw_name:
             return True
 
@@ -168,13 +164,14 @@ class TaxonomyManager:
         if not cleaned or len(cleaned) < 2:
             return True
 
-        # Purely numeric or single characters
-        if re.match(r"^\d+$", cleaned) or len(cleaned) <= 1:
+        # Purely numeric, punctuation-only, or single-character noise.
+        # C++, C#, and .NET remain valid because they contain letters.
+        if (
+            re.fullmatch(r"\d[\d., -]*", cleaned)
+            or not any(character.isalpha() for character in cleaned)
+            or len(cleaned) <= 1
+        ):
             return True
-
-        # If explicitly extracted candidate, do not blacklist legitimate technical skills
-        if is_explicit and cleaned in LEGITIMATE_EXPLICIT_SKILLS:
-            return False
 
         # Exact match in blacklist
         if cleaned in STOPWORDS_BLACKLIST:
@@ -240,30 +237,14 @@ class TaxonomyManager:
         """
         Returns (skill_id, canonical_name, category).
         If strict=True: returns (None, None, None) if not found in taxonomy or blacklisted.
-        If strict=False: creates a normalized slug only if not blacklisted.
+        Unknown skills never receive synthetic taxonomy IDs.  Call resolve() for
+        open-world extraction, where an unknown explicit label is preserved.
         """
         matched = self.find_skill(raw_name)
         if matched:
             return matched.skill_id, matched.canonical_name, matched.category
 
-        if strict or self.is_blacklisted(raw_name):
-            return None, None, None
-
-        # Filter out multi-word sentence fragments or feature descriptions
-        words = raw_name.strip().split()
-        if len(words) > 2 or len(raw_name) > 25:
-            return None, None, None
-
-        # Non-strict fallback for validated technical entities only
-        clean_id = self._clean_string(raw_name).replace(" ", "_").replace(".", "_").replace("+", "p").replace("#", "sharp")
-        clean_id = re.sub(r"[^\w_]", "", clean_id)
-        if len(clean_id) < 2:
-            return None, None, None
-
-        skill_id = f"skill_{clean_id}"
-        canonical_name = raw_name.strip().title()
-        category = "Tools"
-        return skill_id, canonical_name, category
+        return None, None, None
 
     def resolve(self, raw_skill: str) -> tuple[str | None, str]:
         """

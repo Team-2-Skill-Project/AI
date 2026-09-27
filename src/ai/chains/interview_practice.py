@@ -2,9 +2,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, cast
+
 from langchain_core.prompts import PromptTemplate
-from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel
+
 
 from src.core.llm import get_llm, truncate_to_token_limit
 from src.schemas.interview import (
@@ -140,7 +142,12 @@ class PracticeInterviewChains:
         )
 
         structured_llm = active_llm.with_structured_output(PracticeQuestionSetGenerationResult)
-        result: PracticeQuestionSetGenerationResult = await structured_llm.ainvoke(formatted)
+        raw_result = await structured_llm.ainvoke(formatted)
+        if isinstance(raw_result, dict):
+            result: PracticeQuestionSetGenerationResult = PracticeQuestionSetGenerationResult.model_validate(raw_result)
+        else:
+            result = cast(PracticeQuestionSetGenerationResult, raw_result)
+
 
         questions: List[Union[MCQQuestion, EssayQuestion]] = []
         for q in result.mcq_questions:
@@ -301,7 +308,12 @@ class PracticeInterviewChains:
 
         active_llm = self.get_active_llm()
         grader = active_llm.with_structured_output(EssayGradingSchema)
-        grading_res: EssayGradingSchema = await grader.ainvoke(formatted)
+        raw_grading = await grader.ainvoke(formatted)
+        if isinstance(raw_grading, dict):
+            grading_res: EssayGradingSchema = EssayGradingSchema.model_validate(raw_grading)
+        else:
+            grading_res = cast(EssayGradingSchema, raw_grading)
+
 
         return EssayEvaluationItem(
             question_id=question_id,
@@ -369,8 +381,13 @@ class PracticeInterviewChains:
 
         active_llm = self.get_active_llm()
         summarizer = active_llm.with_structured_output(SummaryFeedbackSchema)
-        res: SummaryFeedbackSchema = await summarizer.ainvoke(formatted)
+        raw_summary = await summarizer.ainvoke(formatted)
+        if isinstance(raw_summary, dict):
+            res: SummaryFeedbackSchema = SummaryFeedbackSchema.model_validate(raw_summary)
+        else:
+            res = cast(SummaryFeedbackSchema, raw_summary)
         return res.summary_feedback
+
 
     def _fallback_summary_feedback(self, percentage: float) -> str:
         if percentage >= 80.0:

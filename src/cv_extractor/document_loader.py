@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -50,22 +52,20 @@ class DocumentLoader:
             raise ValueError(f"No extractor available for format: {ext}")
 
     def _extract_pdf(self, path: Path) -> tuple[str, list[str]]:
-        """Extracts digital text and injects clickable hyperlink URLs inline at their exact positions."""
+        """Extract readable PDF text while returning hyperlink annotations separately."""
         text_pages = []
         extracted_links: list[str] = []
         try:
             import pypdf
             reader = pypdf.PdfReader(str(path))
             for page in reader.pages:
-                # 1. Collect link annotations with their bounding boxes
-                page_links = []
+                # 1. Collect link annotations. Project association receives these separately.
                 if hasattr(page, "annotations") and page.annotations:
                     for annot_ref in page.annotations:
                         try:
                             annot = annot_ref.get_object() if hasattr(annot_ref, "get_object") else annot_ref
                             if not annot or annot.get("/Subtype") != "/Link":
                                 continue
-                            rect = annot.get("/Rect")
                             action = annot.get("/A")
                             uri = None
                             if action and hasattr(action, "get"):
@@ -73,76 +73,30 @@ class DocumentLoader:
                             elif annot and hasattr(annot, "get") and "/URI" in annot:
                                 uri = annot.get("/URI")
 
-                            if uri and rect:
+                            if uri:
                                 uri_str = str(uri).strip()
                                 if uri_str:
                                     if uri_str not in extracted_links:
                                         extracted_links.append(uri_str)
-                                    x1, y1, x2, y2 = [float(v) for v in rect]
-                                    page_links.append({
-                                        "uri": uri_str,
-                                        "x1": min(x1, x2),
-                                        "x2": max(x1, x2),
-                                        "y1": min(y1, y2),
-                                        "y2": max(y1, y2),
-                                        "used": False
-                                    })
                         except Exception:
                             continue
 
-                # Sort links in reading order: top-to-bottom (descending y), left-to-right (ascending x)
-                page_links.sort(key=lambda link_item: (-link_item["y2"], link_item["x1"]))
-
-                # 2. Extract text and inject hyperlinks inline at their exact text position
-                chunks = []
-                def visitor_body(text, cm, tm, font_dict, font_size):
-                    if not text:
-                        return
-                    x = tm[4]
-                    y = tm[5]
-
-                    matched_link = None
-                    is_anchor = any(kw in text for kw in ["[GitHub", "Repo", "Demo", "Link", "LinkedIn", "GitHub", "Portfolio", "Website", "http"])
-
-                    for link in page_links:
-                        if link["used"]:
-                            continue
-
-                        # Check vertical alignment (within 8pt baseline band)
-                        y_match = (link["y1"] - 8 <= y <= link["y2"] + 8)
-                        if not y_match:
-                            continue
-
-                        # Check horizontal alignment
-                        x_match = (link["x1"] - 30 <= x <= link["x2"] + 30)
-
-                        if is_anchor:
-                            if y_match:
-                                # If multiple links on the same line, pick the horizontally matching link
-                                nearby_links = [item for item in page_links if not item["used"] and item["y1"] - 8 <= y <= item["y2"] + 8]
-                                if len(nearby_links) == 1 or (link["x1"] - 50 <= x <= link["x2"] + 100):
-                                    matched_link = link
-                                    break
-                        elif x_match and y_match:
-                            matched_link = link
-                            break
-
-                    clean_text = text.rstrip()
-                    trailing_ws = text[len(clean_text):]
-
-                    if matched_link and clean_text.strip():
-                        matched_link["used"] = True
-                        uri_to_inject = matched_link["uri"]
-                        chunks.append(f"{clean_text} ({uri_to_inject}){trailing_ws}")
-                    else:
-                        chunks.append(text)
+                # Layout extraction is substantially more reliable for glyph-positioned text.
+                # Do not assume it is usable for every PDF: retain standard extraction as a
+                # generic fallback when layout loses a material amount of textual content.
+                try:
+                    layout_text = (page.extract_text(extraction_mode="layout") or "").strip()
+                except Exception as layout_error:
+                    logger.warning("PDF layout extraction failed; using standard extraction: %s", type(layout_error).__name__)
+                    layout_text = ""
 
                 try:
-                    page.extract_text(visitor_text=visitor_body)
-                    page_text = "".join(chunks).strip()
-                except Exception as ve:
-                    logger.warning(f"Visitor text extraction failed, falling back to standard extract_text: {ve}")
-                    page_text = (page.extract_text() or "").strip()
+                    standard_text = (page.extract_text() or "").strip()
+                except Exception as standard_error:
+                    logger.warning("PDF standard extraction failed: %s", type(standard_error).__name__)
+                    standard_text = ""
+
+                page_text = self._select_pdf_text(layout_text, standard_text)
 
                 if page_text:
                     text_pages.append(page_text)
@@ -158,6 +112,28 @@ class DocumentLoader:
                 "Please ensure the document contains digital selectable text (scanned image PDFs are not supported)."
             )
         return full_text, extracted_links
+
+    @staticmethod
+    def _select_pdf_text(layout_text: str, standard_text: str) -> str:
+        """Prefer layout text only when it retains enough readable content."""
+        if not layout_text:
+            return standard_text
+        if not standard_text:
+            return layout_text
+
+        def visible_characters(value: str) -> int:
+            return len(re.sub(r"\s+", "", value))
+
+        layout_visible = visible_characters(layout_text)
+        standard_visible = visible_characters(standard_text)
+        if standard_visible and layout_visible < standard_visible * 0.8:
+            logger.warning(
+                "PDF layout extraction lost material text; using standard extraction instead: layout_chars=%d standard_chars=%d",
+                layout_visible,
+                standard_visible,
+            )
+            return standard_text
+        return layout_text
 
     def _extract_docx(self, path: Path) -> tuple[str, list[str]]:
         """Extracts paragraphs, hyperlinks, and table cells from DOCX files."""

@@ -13,9 +13,12 @@ from .common import SkillLevel  # noqa: F401 - retained as a public compatibilit
 
 def normalize_backend_date(v: Any) -> str | None:
     """
-    Normalizes date representations to strict ISO YYYY-MM-DD.
-    If only partial date precision is available (e.g. '2022', 'Jan 2022', '2022-06', 'Present'),
-    returns None under the zero-fabrication contract.
+    Normalizes source dates to ISO while preserving their stated precision.
+
+    A source year returns ``YYYY``, a source month/year returns ``YYYY-MM``,
+    and a source day-level date returns ``YYYY-MM-DD``.  This retains usable
+    source dates without inventing a day or month.  Open-ended values such as
+    ``Present`` remain null because they are not dates.
     """
     if v is None:
         return None
@@ -31,6 +34,16 @@ def normalize_backend_date(v: Any) -> str | None:
     if re.fullmatch(r"^\d{4}-\d{2}-\d{2}$", s):
         try:
             datetime.date.fromisoformat(s)
+            return s
+        except ValueError:
+            return None
+
+    # Strict ISO month check: YYYY-MM
+    m_iso_month = re.fullmatch(r"(\d{4})-(\d{2})", s)
+    if m_iso_month:
+        year, month = (int(part) for part in m_iso_month.groups())
+        try:
+            datetime.date(year, month, 1)
             return s
         except ValueError:
             return None
@@ -63,7 +76,45 @@ def normalize_backend_date(v: Any) -> str | None:
         except ValueError:
             continue
 
-    # Partial dates (e.g. '2022', '2022-06', 'Jan 2022', 'Present'): return None
+    # Textual month/year: 'Jan 2022', 'September 2022', or 'Sept 2022'.
+    m_text_month = re.search(r"\b([A-Za-z]+)\s+(\d{4})\b", s)
+    if m_text_month:
+        month_token, year = m_text_month.groups()
+        normalized_month_token = month_token[:3].title()
+        try:
+            month = datetime.datetime.strptime(normalized_month_token, "%b").month
+            datetime.date(int(year), month, 1)
+            return f"{year}-{month:02d}"
+        except ValueError:
+            return None
+
+    # Numeric month/year, accepting both YYYY/MM and MM/YYYY without guessing a day.
+    m_numeric_month = re.fullmatch(r"(\d{4})[/.](\d{1,2})", s)
+    if m_numeric_month:
+        year, month = (int(part) for part in m_numeric_month.groups())
+        try:
+            datetime.date(year, month, 1)
+            return f"{year:04d}-{month:02d}"
+        except ValueError:
+            return None
+
+    m_numeric_month = re.fullmatch(r"(\d{1,2})[/.](\d{4})", s)
+    if m_numeric_month:
+        month, year = (int(part) for part in m_numeric_month.groups())
+        try:
+            datetime.date(year, month, 1)
+            return f"{year:04d}-{month:02d}"
+        except ValueError:
+            return None
+
+    # Year-only source dates retain their source precision.
+    if re.fullmatch(r"\d{4}", s):
+        try:
+            datetime.date(int(s), 1, 1)
+            return s
+        except ValueError:
+            return None
+
     return None
 
 
@@ -75,7 +126,7 @@ class EvidenceItem(BaseModel):
 
 
 class CandidateSkill(BaseModel):
-    skill_id: str | None = Field(default=None, description="Canonical taxonomy skill ID (e.g. skill_python), or None if out-of-taxonomy")
+    skill_id: str | None = Field(default=None, description="Stable taxonomy or Skill Registry ID, or None before resolution")
     name: str = Field(..., description="Display name of the skill")
     proficiency: str | None = Field(default=None, description="Proficiency level: beginner, intermediate, advanced, expert, or None if unknown")
     years_of_experience: float | None = Field(default=None, description="Years of experience with this skill if deterministically verified")
@@ -111,10 +162,16 @@ class LanguageItem(BaseModel):
 class EducationItem(BaseModel):
     institution: str | None = Field(default=None, description="University / College / School name")
     degree: str | None = Field(default=None, description="Degree title, e.g. BSc Computer Science")
-    field_of_study: str | None = Field(default=None, description="Field of study / Major")
-    start_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
-    end_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
-    description: str | None = Field(default=None, description="Optional description, thesis, or honors")
+    field_of_study: str | None = Field(
+        default=None,
+        description="Primary field of study / major; do not repeat separately described education details here",
+    )
+    start_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    end_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    description: str | None = Field(
+        default=None,
+        description="Optional additional education details such as a distinct minor, thesis, or honors",
+    )
 
     @field_validator("start_date", "end_date", mode="before")
     @classmethod
@@ -129,11 +186,11 @@ class ExperienceItem(BaseModel):
     )
     job_title: str = Field(..., description="Job title / role")
     employment_type: str | None = Field(default=None, description="Employment type if explicitly stated: full-time, part-time, internship, contract")
-    start_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
-    end_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
+    start_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    end_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
     is_current: bool | None = Field(default=None, description="Whether this is the current job: True=current, False=past, None=unknown")
     description: str | None = Field(default=None, description="Summary and tasks in this role")
-    technologies: list[str] = Field(default_factory=list, description="Technologies or tools used (AI-only)")
+    technologies: list[str] = Field(default_factory=list, description="Technologies or tools explicitly used")
 
     @field_validator("start_date", "end_date", mode="before")
     @classmethod
@@ -160,11 +217,12 @@ class ProjectItem(BaseModel):
     description: str | None = Field(default=None, description="Summary of the project and impact")
     project_url: str | None = Field(default=None, description="Live demo or project link")
     github_url: str | None = Field(default=None, description="GitHub repository link")
-    start_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
-    end_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
-    technologies: list[str] = Field(default_factory=list, description="Technologies / frameworks used (AI-only)")
+    start_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    end_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    project_date: str | None = Field(default=None, description="Single unlabeled project date, preserving source precision without start/end semantics")
+    technologies: list[str] = Field(default_factory=list, description="Technologies or tools explicitly used")
 
-    @field_validator("start_date", "end_date", mode="before")
+    @field_validator("start_date", "end_date", "project_date", mode="before")
     @classmethod
     def normalize_dates(cls, v):
         return normalize_backend_date(v)
@@ -190,8 +248,10 @@ class RawSkillItem(BaseModel):
 class CertificateItem(BaseModel):
     name: str = Field(..., description="Certification name")
     issuing_organization: str | None = Field(default=None, description="Issuing organization")
-    issue_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
-    expiration_date: str | None = Field(default=None, description="Exact source-supported day-level date only (YYYY-MM-DD); otherwise null")
+    platform: str | None = Field(default=None, description="Learning or delivery platform when explicitly stated")
+    issue_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    expiration_date: str | None = Field(default=None, description="Source-supported ISO date preserving precision: YYYY, YYYY-MM, or YYYY-MM-DD; otherwise null")
+    status: str | None = Field(default=None, description="Explicit source-stated certificate progress or completion status")
     credential_url: str | None = Field(default=None, description="Direct URL to verification certificate")
 
     @field_validator("issue_date", "expiration_date", mode="before")
@@ -243,8 +303,14 @@ class CVExtractionSchema(BaseModel):
     projects: list[ProjectItem] = Field(default_factory=list, description="Project records")
     certificates: list[CertificateItem] = Field(default_factory=list, description="Certificates & courses")
     languages: list[LanguageItem] = Field(default_factory=list, description="Languages spoken and proficiency")
-    raw_skills: list[RawSkillItem | dict[str, Any] | str] = Field(default_factory=list, description="Extracted skills")
-    target_roles: list[str] = Field(default_factory=list, description="Target job roles")
+    raw_skills: list[RawSkillItem | dict[str, Any] | str] = Field(
+        default_factory=list,
+        description="All explicitly named skills, tools, APIs, platforms, databases, models, and technologies",
+    )
+    target_roles: list[str] = Field(
+        default_factory=list,
+        description="Explicit desired target job roles or career tracks; do not infer from experience titles",
+    )
     preferences: CandidatePreferences = Field(
         default_factory=CandidatePreferences,
         description="Explicit job and work preferences; do not infer preferences from employment history",

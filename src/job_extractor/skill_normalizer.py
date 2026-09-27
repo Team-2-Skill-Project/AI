@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from src.taxonomy.taxonomy_manager import TaxonomyManager
+from src.taxonomy.skill_registry_resolver import SkillRegistryResolver
 
 from .models import NormalizedSkill
 
@@ -22,15 +23,16 @@ logger = logging.getLogger(__name__)
 def normalize_skills(
     raw_skills: list[dict[str, Any]],
     taxonomy: TaxonomyManager,
+    skill_registry_resolver: SkillRegistryResolver | None = None,
 ) -> list[NormalizedSkill]:
     """
     Resolve a list of raw skill dicts (from LLM extraction) into NormalizedSkill objects.
 
     Each raw dict is expected to have keys: name, importance, required_level.
 
-    Taxonomy resolution uses strict=True so that only recognized skills
-    and aliases in the platform taxonomy get canonical skill_ids and categories.
-    Unmapped terms have skill_id=None and category=None.
+    When a registry resolver is supplied, each safe explicit term receives the
+    shared persistent identity used by CV extraction. Without it, this remains
+    compatible with taxonomy-only callers and leaves unknown terms unassigned.
 
     Args:
         raw_skills: List of raw skill dicts from _validate_raw().
@@ -51,7 +53,13 @@ def normalize_skills(
             logger.debug("Dropped blacklisted skill token: '%s'", raw_name)
             continue
 
-        skill_id, canonical_name, category = taxonomy.normalize_skill(raw_name, strict=True)
+        if skill_registry_resolver:
+            skill_id, canonical_name, category = skill_registry_resolver.resolve(
+                raw_name,
+                create_unknown=True,
+            )
+        else:
+            skill_id, canonical_name, category = taxonomy.normalize_skill(raw_name, strict=True)
 
         normalized.append(
             NormalizedSkill(
