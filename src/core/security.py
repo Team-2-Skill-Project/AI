@@ -1,13 +1,14 @@
 from __future__ import annotations
-import time
+import hashlib
+import hmac
 import logging
 import secrets
 import threading
 import time
 import uuid
 from collections import defaultdict, deque
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional, Tuple, cast
 
 from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
@@ -149,12 +150,13 @@ class RedisRateLimiter:
         now = time.time()
         cutoff = now - window
 
-        client = get_redis_client()
+        client: Any = get_redis_client()
 
-        pipe = client.pipeline()
+        pipe: Any = client.pipeline()
         pipe.zremrangebyscore(redis_key, "-inf", cutoff)
         pipe.zcard(redis_key)
-        _, current_count = pipe.execute()
+        pipe_results = cast(Any, pipe.execute())
+        current_count = int(pipe_results[1]) if pipe_results and len(pipe_results) > 1 else 0
 
         if current_count < limit:
             member = f"{now}:{uuid.uuid4().hex[:8]}"
@@ -166,9 +168,15 @@ class RedisRateLimiter:
             remaining = max(0, limit - (current_count + 1))
             return True, remaining, 0
         else:
-            oldest_entries = client.zrange(redis_key, 0, 0, withscores=True)
-            if oldest_entries:
-                oldest_score = oldest_entries[0][1]
+            raw_entries = cast(Any, client.zrange(redis_key, 0, 0, withscores=True))
+            if raw_entries and isinstance(raw_entries, (list, tuple)) and len(raw_entries) > 0:
+                first_entry = cast(Any, raw_entries[0])
+                if isinstance(first_entry, (list, tuple)) and len(first_entry) > 1:
+                    oldest_score = float(first_entry[1])
+                elif isinstance(first_entry, (int, float)):
+                    oldest_score = float(first_entry)
+                else:
+                    oldest_score = now
                 retry_after = max(1, int(oldest_score + window - now))
             else:
                 retry_after = max(1, window)
@@ -234,22 +242,25 @@ rate_limiter = HybridRateLimiter()
 
 def get_client_ip(request: Request | StarletteRequest) -> str:
     """
-    Resolves client IP address safely from request headers, taking into
-    account reverse proxies and load balancers (e.g. Nginx, Cloudflare, AWS ALB).
+    Resolves client identifier safely for rate limiting and auditing.
+    Precedence:
+      1. Hashed API Key (X-API-Key or Authorization Bearer) -> 'key:<sha256>'
+      2. Client ID (X-Client-ID) -> 'client:<id>'
+      3. Peer client IP (request.client.host) -> '<ip>'
     """
-    client_key = request.headers.get("x-client-id") or request.headers.get("x-api-key")
-    if client_key:
-        return f"key:{client_key.strip()}"
+    api_key = request.headers.get("x-api-key")
+    if not api_key:
+        auth = request.headers.get("authorization", "")
+        if auth.startswith("Bearer "):
+            api_key = auth[7:].strip()
 
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        client_ip = forwarded_for.split(",")[0].strip()
-        if client_ip:
-            return client_ip
+    if api_key:
+        hashed = hashlib.sha256(api_key.strip().encode("utf-8")).hexdigest()
+        return f"key:{hashed}"
 
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
+    client_id = request.headers.get("x-client-id")
+    if client_id:
+        return f"client:{client_id.strip()}"
 
     if request.client and request.client.host:
         return request.client.host
@@ -343,9 +354,9 @@ def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta]
     """Generate a lightweight signed token containing data and expiry timestamp."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire.timestamp(), "jti": uuid.uuid4().hex})
     token_payload = "&".join(f"{k}={v}" for k, v in sorted(to_encode.items()))
     secret = settings.SECRET_KEY.encode("utf-8")
@@ -372,7 +383,7 @@ def decode_access_token(token: str) -> Optional[dict[str, Any]]:
 
         if "exp" in parsed:
             exp_ts = float(parsed["exp"])
-            if datetime.utcnow().timestamp() > exp_ts:
+            if datetime.now(timezone.utc).timestamp() > exp_ts:
                 return None  # Expired
         return parsed
     except Exception:

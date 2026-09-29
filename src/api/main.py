@@ -159,6 +159,16 @@ init_db()
 
 
 
+@app.get("/", tags=["System Health"], summary="Root Endpoint")
+async def root():
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "docs_url": "/docs",
+    }
+
+
 @app.get("/health", tags=["System Health"], summary="Health Check")
 async def health_check():
     redis_avail = is_redis_available()

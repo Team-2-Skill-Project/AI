@@ -133,6 +133,8 @@ class AppSettings(BaseModel):
     enable_api_key_auth: bool = Field(default=False)
     rate_limit_per_minute: int = Field(default=60, ge=1)
     enable_rate_limiting: bool = Field(default=True)
+    secret_key: str = Field(default="default_secret_key_change_in_production_12345")
+    access_token_expire_minutes: int = Field(default=60 * 24)
 
 
 class Settings(BaseModel):
@@ -173,6 +175,8 @@ class Settings(BaseModel):
     RATE_LIMIT_REQUESTS: int = Field(default=60, ge=1)
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
     LLM_ALLOW_REQUEST_OVERRIDES: bool = False
+    SECRET_KEY: str = "default_secret_key_change_in_production_12345"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
     # Backward-compatible attribute aliases (used by CV service, security, and tests)
     taxonomy_path: str = Field(default_factory=resolve_taxonomy_path)
@@ -180,6 +184,8 @@ class Settings(BaseModel):
     enable_api_key_auth: bool = False
     rate_limit_per_minute: int = Field(default=60, ge=1)
     enable_rate_limiting: bool = True
+    secret_key: str = "default_secret_key_change_in_production_12345"
+    access_token_expire_minutes: int = 60 * 24
     cors_allowed_methods: list[str] = Field(default_factory=lambda: ["GET", "POST", "OPTIONS"])
     cors_allowed_headers: list[str] = Field(
         default_factory=lambda: ["Content-Type", "Authorization", "X-API-Key", "Accept"]
@@ -235,6 +241,8 @@ class Settings(BaseModel):
         enable_api_key_auth = env_bool("ENABLE_API_KEY_AUTH", False)
         rate_limit_enabled = env_bool("ENABLE_RATE_LIMITING", env_bool("RATE_LIMIT_ENABLED", True))
         rate_limit_requests = env_int("RATE_LIMIT_PER_MINUTE", env_int("RATE_LIMIT_REQUESTS", 60))
+        secret_key = env("SECRET_KEY", "default_secret_key_change_in_production_12345")
+        access_token_expire_minutes = env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24)
         cors_origins = origins or cls().CORS_ORIGINS
         cors_methods = methods or getattr(cls(), "CORS_ALLOWED_METHODS", ["GET", "POST", "OPTIONS"])
         cors_headers = headers or getattr(cls(), "CORS_ALLOWED_HEADERS", ["Content-Type", "Authorization", "X-API-Key", "Accept"])
@@ -263,6 +271,8 @@ class Settings(BaseModel):
             RATE_LIMIT_ENABLED=rate_limit_enabled,
             RATE_LIMIT_REQUESTS=rate_limit_requests,
             RATE_LIMIT_WINDOW_SECONDS=env_int("RATE_LIMIT_WINDOW_SECONDS", 60),
+            SECRET_KEY=secret_key,
+            ACCESS_TOKEN_EXPIRE_MINUTES=access_token_expire_minutes,
             LOG_LEVEL=env("LOG_LEVEL", "INFO"),
             TAXONOMY_PATH=resolve_taxonomy_path(env("TAXONOMY_PATH")) if env("TAXONOMY_PATH") else resolve_taxonomy_path(),
             taxonomy_path=resolve_taxonomy_path(env("TAXONOMY_PATH")) if env("TAXONOMY_PATH") else resolve_taxonomy_path(),
@@ -270,6 +280,8 @@ class Settings(BaseModel):
             enable_api_key_auth=enable_api_key_auth,
             rate_limit_per_minute=rate_limit_requests,
             enable_rate_limiting=rate_limit_enabled,
+            secret_key=secret_key,
+            access_token_expire_minutes=access_token_expire_minutes,
             cors_allowed_methods=cors_methods,
             cors_allowed_headers=cors_headers,
             cors_allow_credentials=cors_allow_credentials,
