@@ -11,6 +11,7 @@ Implements pure mathematical scoring functions for:
 
 import math
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Any, Tuple, Set, Union
 
@@ -262,47 +263,102 @@ def calculate_preference_fit(
     return round(float(total_pref), 1)
 
 
+FRESHNESS_NEUTRAL_SCORE = 50.0
+
+
+@dataclass(frozen=True)
+class FreshnessTimestamp:
+    """The timestamp selected for freshness without changing its source semantics."""
+
+    source: str
+    raw_value: Optional[Union[datetime, str]]
+    timestamp_utc: Optional[datetime]
+    is_local_proxy: bool = False
+
+
+def _parse_timestamp_utc(value: Optional[Union[datetime, str]]) -> Optional[datetime]:
+    """Parse a timestamp and return a UTC-aware value, or ``None`` when unusable."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def resolve_freshness_timestamp(
+    posted_at: Optional[Union[datetime, str]],
+    source_updated_at: Optional[Union[datetime, str]] = None,
+    ingested_at: Optional[Union[datetime, str]] = None,
+) -> FreshnessTimestamp:
+    """Select the best usable timestamp while retaining what that time means.
+
+    ``source_updated_at`` means the source listing was updated, not that it was
+    published. ``ingested_at`` is local operational metadata and is only a
+    lower-confidence proxy: it can reduce freshness for stale ingestion but
+    cannot make an unknown-age listing look newly posted.
+    """
+    for source, raw_value, is_local_proxy in (
+        ("posted_at", posted_at, False),
+        ("source_updated_at", source_updated_at, False),
+        ("ingested_at", ingested_at, True),
+    ):
+        parsed = _parse_timestamp_utc(raw_value)
+        if parsed is not None:
+            return FreshnessTimestamp(
+                source=source,
+                raw_value=raw_value,
+                timestamp_utc=parsed,
+                is_local_proxy=is_local_proxy,
+            )
+    return FreshnessTimestamp(source="none", raw_value=None, timestamp_utc=None)
+
+
 def calculate_freshness_score(
     posted_at: Optional[Union[datetime, str]],
     now_dt: Optional[datetime] = None,
+    *,
+    source_updated_at: Optional[Union[datetime, str]] = None,
+    ingested_at: Optional[Union[datetime, str]] = None,
 ) -> float:
     """
     Calculates deterministic Freshness score (0.0 to 100.0) via exponential decay:
         S_fresh = 100.0 * e^(-0.05 * age_days)
     
-    - Posted Today (0 days): 100.0
+    Precedence: publication time, source update time, then local ingestion
+    time as a capped lower-confidence proxy.
+
+    - Posted/updated Today (0 days): 100.0
     - Posted 7 days ago: 70.5
     - Posted 14 days ago: 49.6
     - Posted 30 days ago: 22.3
-    - Missing or invalid posted_at: Neutral (50.0)
+    - Missing or invalid timestamps: Neutral (50.0)
+
+    A local ingestion timestamp never claims the source posted the job then;
+    it is capped at neutral so a newly ingested, unknown-age job receives no
+    artificial freshness boost.
     """
-    if not posted_at:
-        return 50.0
+    selected = resolve_freshness_timestamp(posted_at, source_updated_at, ingested_at)
+    if selected.timestamp_utc is None:
+        return FRESHNESS_NEUTRAL_SCORE
 
-    now = now_dt or datetime.now(timezone.utc)
+    now = _parse_timestamp_utc(now_dt or datetime.now(timezone.utc))
+    if now is None:  # Defensive: callers cannot normally provide an invalid datetime.
+        now = datetime.now(timezone.utc)
 
-    dt_obj: Optional[datetime] = None
-    if isinstance(posted_at, datetime):
-        dt_obj = posted_at
-    elif isinstance(posted_at, str) and posted_at.strip():
-        try:
-            clean_str = posted_at.replace("Z", "+00:00")
-            dt_obj = datetime.fromisoformat(clean_str)
-        except Exception:
-            return 50.0
-
-    if not dt_obj:
-        return 50.0
-
-    if dt_obj.tzinfo is None:
-        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-
-    age_seconds = (now - dt_obj).total_seconds()
+    age_seconds = (now - selected.timestamp_utc).total_seconds()
     age_days = max(0.0, age_seconds / 86400.0)
 
     score = 100.0 * math.exp(-0.05 * age_days)
+    if selected.is_local_proxy:
+        score = min(score, FRESHNESS_NEUTRAL_SCORE)
     return round(max(0.0, min(100.0, float(score))), 1)
 
 

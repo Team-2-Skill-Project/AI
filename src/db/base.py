@@ -3,6 +3,7 @@ import logging
 from typing import Generator
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 # pyrefly: ignore [missing-import]
 from src.core.config import settings
 
@@ -10,14 +11,20 @@ logger = logging.getLogger(__name__)
 
 # Configure connect arguments (allow multithreaded access for SQLite)
 connect_args = {}
+engine_options = {"echo": False, "pool_pre_ping": True}
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
+
+# Pytest sets this URL before importing the application.  StaticPool keeps the
+# same in-memory SQLite database visible to TestClient worker threads while
+# remaining entirely separate from the runtime database.
+if settings.ENVIRONMENT == "test" and settings.DATABASE_URL == "sqlite://":
+    engine_options["poolclass"] = StaticPool
 
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args=connect_args,
-    echo=False,
-    pool_pre_ping=True
+    **engine_options,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -42,6 +49,8 @@ def init_db() -> None:
         import src.db.models.roadmap
         import src.db.models.skill_resource
         import src.db.models.skill_registry  # noqa: F401 - registers registry tables
+        import src.db.models.candidate  # noqa: F401 - registers candidates table
+        import src.db.models.interaction  # noqa: F401 - registers candidate_interactions table
 
         Base.metadata.create_all(bind=engine)
         _ensure_job_columns()

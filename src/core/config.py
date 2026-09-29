@@ -160,6 +160,7 @@ class Settings(BaseModel):
     REDIS_MAX_CONNECTIONS: int = Field(default=20, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0.0)
     REDIS_CONNECT_TIMEOUT: float = Field(default=2.0, gt=0.0)
+    RECOMMENDATION_CACHE_TTL_SECONDS: int = Field(default=600, ge=1)
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None
 
@@ -255,6 +256,7 @@ class Settings(BaseModel):
             REDIS_MAX_CONNECTIONS=env_int("REDIS_MAX_CONNECTIONS", 20),
             REDIS_SOCKET_TIMEOUT=env_float("REDIS_SOCKET_TIMEOUT", 2.0),
             REDIS_CONNECT_TIMEOUT=env_float("REDIS_CONNECT_TIMEOUT", 2.0),
+            RECOMMENDATION_CACHE_TTL_SECONDS=env_int("RECOMMENDATION_CACHE_TTL_SECONDS", 600),
             CELERY_BROKER_URL=env("CELERY_BROKER_URL"),
             CELERY_RESULT_BACKEND=env("CELERY_RESULT_BACKEND"),
             RATE_LIMIT_ENABLED=rate_limit_en,

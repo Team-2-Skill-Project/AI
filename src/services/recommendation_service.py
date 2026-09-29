@@ -13,7 +13,11 @@ Coordinates:
 from datetime import datetime, timezone
 from typing import List, Optional, Any, Tuple
 
-from src.repositories.behavior_repository import BehaviorRepository, MockBehaviorRepository
+from src.repositories.behavior_repository import (
+    BehaviorRepository,
+    MockBehaviorRepository,
+    behavior_repository as default_behavior_repository,
+)
 from src.repositories.job_repository import JobRepository
 from src.db.repositories.job_repository import DatabaseJobRepository
 from src.schemas.job import JobPosting
@@ -24,6 +28,7 @@ from src.schemas.recommendation import (
 )
 from src.services.matching_service import MatchingService, matching_service as default_matching_service
 from src.services.recommendation_explanation import build_recommendation_explanation
+from src.services.recommendation_cache import RecommendationFeedCache
 from src.services.recommendation_scoring import (
     calculate_behavior_score,
     calculate_freshness_score,
@@ -43,11 +48,13 @@ class RecommendationService:
         behavior_repository: Optional[BehaviorRepository] = None,
         matching_svc: Optional[MatchingService] = None,
         taxonomy_manager: Optional[TaxonomyManager] = None,
+        feed_cache: Optional[RecommendationFeedCache] = None,
     ):
         self.job_repo = job_repository or DatabaseJobRepository()
-        self.behavior_repo = behavior_repository or MockBehaviorRepository()
+        self.behavior_repo = behavior_repository or default_behavior_repository
         self.matching_service = matching_svc or default_matching_service
         self.taxonomy = taxonomy_manager or TaxonomyManager()
+        self.feed_cache = feed_cache or RecommendationFeedCache()
 
     def filter_candidate_jobs(
         self,
@@ -169,7 +176,6 @@ class RecommendationService:
             min_score: Optional minimum recommendation score cutoff
         """
         # Resolve candidate ID and attributes
-        candidate_id = "cand_001"
         target_roles: List[str] = []
         preferences = None
         experience_items = []
@@ -177,10 +183,13 @@ class RecommendationService:
         if isinstance(candidate, str):
             raise ValueError("RecommendationService requires a complete candidate profile, not only a candidate_id.")
 
-        if hasattr(candidate, "candidate_id"):
-            candidate_id = candidate.candidate_id
-        elif isinstance(candidate, dict):
-            candidate_id = candidate.get("candidate_id", "cand_001")
+        candidate_id = getattr(candidate, "candidate_id", None)
+        if not candidate_id and isinstance(candidate, dict):
+            candidate_id = candidate.get("candidate_id")
+
+        if not candidate_id or not str(candidate_id).strip():
+            raise ValueError("RecommendationService requires a candidate profile with a valid candidate_id.")
+        candidate_id = str(candidate_id).strip()
 
         if hasattr(candidate, "target_roles") and candidate.target_roles:
             target_roles = candidate.target_roles
@@ -208,6 +217,23 @@ class RecommendationService:
 
         # 2. Retrieve Active Jobs from Repository
         raw_jobs = self.job_repo.get_active_jobs(work_mode=work_mode, location=location)
+
+        # Cache entries are candidate-specific and carry hashes of current
+        # candidate, relevant behavior, catalog, and query state.  This lets
+        # writes naturally invalidate prior entries without Redis key scans.
+        cache_key = self.feed_cache.build_key(
+            candidate=candidate,
+            behavior=behavior,
+            jobs=raw_jobs,
+            page=page,
+            limit=limit,
+            work_mode=work_mode,
+            location=location,
+            min_score=min_score,
+        )
+        cached_feed = self.feed_cache.get(cache_key)
+        if cached_feed is not None:
+            return cached_feed
 
         # 3. Candidate-Specific Filtering
         eligible_jobs = self.filter_candidate_jobs(raw_jobs, behavior)
@@ -249,8 +275,13 @@ class RecommendationService:
                 job_employment_type=job.employment_type,
             )
 
-            # d. Freshness Decay
-            f_score = calculate_freshness_score(job.posted_at)
+            # d. Freshness Decay.  The scorer retains source-update and local
+            # ingestion semantics; neither is exposed as a posting date.
+            f_score = calculate_freshness_score(
+                job.posted_at,
+                source_updated_at=job.source_updated_at,
+                ingested_at=job.ingested_at,
+            )
 
             # e. Behavior Score
             b_score = calculate_behavior_score(behavior, job)
@@ -316,7 +347,7 @@ class RecommendationService:
         page_items = scored_items[start_idx:end_idx]
         has_more = end_idx < total_count
 
-        return RecommendationFeedResponse(
+        response = RecommendationFeedResponse(
             candidate_id=candidate_id,
             total_results=total_count,
             page=page,
@@ -325,6 +356,9 @@ class RecommendationService:
             generated_at=datetime.now(timezone.utc),
             recommendations=page_items,
         )
+        # Cache only a fully constructed, schema-validated successful response.
+        self.feed_cache.set(cache_key, response)
+        return response
 
 
 recommendation_service = RecommendationService()
