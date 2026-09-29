@@ -28,8 +28,10 @@ class CacheService:
             try:
                 client = get_redis_client()
                 val = client.get(redis_key)
-                if val is not None:
+                if isinstance(val, (str, bytes, bytearray)):
                     return json.loads(val)
+                elif val is not None:
+                    return json.loads(str(val))
                 return None
             except Exception as e:
                 logger.warning(f"Redis cache get failed for '{key}' ({e}); checking memory cache.")

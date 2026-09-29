@@ -47,8 +47,6 @@ class ApplicationStrategyService:
         candidate_obj = custom_profile or candidate_repository.get_candidate(user_id)
         if hasattr(candidate_obj, "model_dump"):
             profile_data = candidate_obj.model_dump()
-        elif hasattr(candidate_obj, "dict"):
-            profile_data = candidate_obj.dict()
         elif isinstance(candidate_obj, dict):
             profile_data = candidate_obj
         else:
@@ -67,14 +65,13 @@ class ApplicationStrategyService:
 
         if hasattr(job_obj, "model_dump"):
             job_data = job_obj.model_dump()
-        elif hasattr(job_obj, "dict"):
-            job_data = job_obj.dict()
         elif isinstance(job_obj, dict):
             job_data = job_obj
         else:
             job_data = {"id": job_id, "title": target_role or "Target Role", "required_skills": []}
 
-        job_title = job_data.get("title") or job_data.get("job_title") or "Target Job"
+        raw_title = job_data.get("title") or job_data.get("job_title") or target_role
+        job_title: str = raw_title if isinstance(raw_title, str) else (target_role or "Target Job")
         required_skills = (
             job_data.get("required_skills")
             or job_data.get("skills")

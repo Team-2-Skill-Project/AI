@@ -87,8 +87,8 @@ class MatchingService:
         6. Upskilling recommendations:
            - Guarantees every missing critical skill is present in recommended_upskilling_path.
         """
-        from src.taxonomy.taxonomy_manager import TaxonomyManager
-        taxonomy = TaxonomyManager()
+        from src.taxonomy.taxonomy_manager import get_taxonomy_manager
+        taxonomy = get_taxonomy_manager()
 
         # Build index of items returned in the raw response
         # Keyed by lowercased skill name and canonical taxonomy ID

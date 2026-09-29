@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Text, DateTime, func
 from src.db.base import Base
 
@@ -13,7 +13,7 @@ class MentorMessage(Base):
     role = Column(String, nullable=False)  # "user" | "assistant" | "tool"
     content = Column(Text, nullable=False)
     tool_name = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
     def to_dict(self) -> dict:
         return {

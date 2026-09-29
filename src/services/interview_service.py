@@ -44,7 +44,7 @@ def sanitize_question_for_client(question: Union[MCQQuestion, EssayQuestion, Dic
     elif hasattr(question, "model_dump"):
         q_dict = question.model_dump()
     else:
-        q_dict = question.dict()
+        q_dict = dict(question)
 
     q_type = q_dict.get("type", "mcq")
     if q_type == "mcq":
@@ -129,7 +129,7 @@ class InterviewService:
 
         # Full questions dict (with true answers) for storage
         full_questions_dict = [
-            q.model_dump() if hasattr(q, "model_dump") else q.dict()
+            q.model_dump() if hasattr(q, "model_dump") else dict(q)
             for q in generated_questions
         ]
 
@@ -216,15 +216,14 @@ class InterviewService:
         # Retrieve session context if stored in DB to hydrate missing question metadata
         stored_session: Optional[InterviewSessionModel] = None
         stored_questions_by_id: Dict[str, Dict[str, Any]] = {}
-        track = "General"
-
+        track: str = "General"
         if db is not None and sub.session_id:
             try:
                 stored_session = db.query(InterviewSessionModel).filter(InterviewSessionModel.id == sub.session_id).first()
                 if stored_session:
-                    track = stored_session.track or stored_session.target_role or "General"
+                    track = str(stored_session.track or stored_session.target_role or "General")
                     if stored_session.questions_json:
-                        for q in json.loads(stored_session.questions_json):
+                        for q in json.loads(str(stored_session.questions_json)):
                             qid = q.get("id") or q.get("question_id")
                             if qid:
                                 stored_questions_by_id[qid] = q
@@ -307,14 +306,14 @@ class InterviewService:
         if db is not None:
             try:
                 answers_data = [
-                    a.model_dump() if hasattr(a, "model_dump") else a.dict()
+                    a.model_dump() if hasattr(a, "model_dump") else dict(a)
                     for a in sub.answers
                 ]
-                eval_data = eval_response.model_dump() if hasattr(eval_response, "model_dump") else eval_response.dict()
+                eval_data = eval_response.model_dump() if hasattr(eval_response, "model_dump") else dict(eval_response)
 
                 if stored_session:
-                    stored_session.answers_json = json.dumps(answers_data)
-                    stored_session.evaluation_json = json.dumps(eval_data)
+                    setattr(stored_session, "answers_json", json.dumps(answers_data))
+                    setattr(stored_session, "evaluation_json", json.dumps(eval_data))
                     db.commit()
                 else:
                     # Create session entry if not pre-created

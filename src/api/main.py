@@ -161,12 +161,17 @@ init_db()
 
 @app.get("/health", tags=["System Health"], summary="Health Check")
 async def health_check():
+    redis_avail = is_redis_available()
     return {
         "status": "healthy",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
-        "redis_connected": is_redis_available(),
+        "redis_connected": redis_avail,
+        "redis": {
+            "status": "connected" if redis_avail else "unavailable",
+            "url": settings.REDIS_URL,
+        },
     }
 
 

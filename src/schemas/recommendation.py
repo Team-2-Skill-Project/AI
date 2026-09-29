@@ -6,7 +6,7 @@ item contains `job_id`, `rank`, `score`, and `reasons: List[str]`, along with
 rich structured breakdown and explanation metadata.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
@@ -71,7 +71,7 @@ class RecommendationFeedResponse(BaseModel):
     page: int = Field(default=1, ge=1, description="Current page number")
     limit: int = Field(default=20, ge=1, description="Maximum items requested per page")
     has_more: bool = Field(default=False, description="Whether more pages are available")
-    generated_at: datetime = Field(default_factory=datetime.utcnow, description="UTC timestamp of feed generation")
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="UTC timestamp of feed generation")
     recommendations: List[RecommendedJobItem] = Field(
         default_factory=list,
         description="Ordered list of recommended job items (DAY 1 root field name)"

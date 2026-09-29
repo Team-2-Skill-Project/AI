@@ -165,7 +165,7 @@ class ReviewQueueService:
                     )
                     db.add(resource)
                 else:
-                    resource.status = "approved"
+                    setattr(resource, "status", "approved")
                 db.commit()
 
         return ReviewQueueItemResponse(**record.to_dict()) if record else None

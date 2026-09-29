@@ -1,23 +1,37 @@
+# --- Core Web API & Validation ---
+fastapi>=0.110.0
+uvicorn>=0.28.0
+python-multipart>=0.0.9
+httpx>=0.27.0
 pydantic>=2.5.0
 pydantic-settings>=2.2.1
+python-dotenv>=1.0.0
+
+# --- Database, Storage & Background Tasks ---
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+redis>=5.0.0
+celery>=5.3.0
+
+# --- Document Parsing & Text Extraction ---
 pypdf>=4.0.0
 python-docx>=1.1.0
-python-dotenv>=1.0.0
+
+# --- LLM, LangChain & Multi-Agent Frameworks ---
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
 langchain-google-genai>=2.0.0
 langchain-groq>=0.2.0
 langchain-openai>=0.2.0
-pytest>=8.0.0
-fastapi>=0.110.0
-uvicorn>=0.28.0
-python-multipart>=0.0.9
-sqlalchemy>=2.0.0
-redis>=5.0.0
-celery>=5.3.0
-httpx>=0.27.0
-pytest-asyncio>=0.23.0
 crewai>=0.1.0
 instructor>=1.0.0
 openai>=1.0.0
+
+# --- External APIs & Web Search ---
+google-api-python-client>=2.100.0
+duckduckgo-search>=5.0.0
+
+# --- Testing Suite ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

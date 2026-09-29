@@ -56,12 +56,14 @@ class SkillRegistryResolver:
 
             existing = repository.find_by_normalized_name(normalized)
             if existing:
+                skill_id_str = str(existing.skill_id)
                 repository.add_trusted_aliases(
-                    existing.skill_id,
+                    skill_id_str,
                     source_declared_aliases,
                     self.normalized_name,
                 )
-                return existing.skill_id, existing.canonical_name, existing.category
+                category = str(existing.category) if existing.category else None
+                return skill_id_str, str(existing.canonical_name), category
 
             # A known taxonomy item must retain the legacy, stable seed ID even
             # if the bootstrap database was initialized after this resolver.
@@ -78,11 +80,13 @@ class SkillRegistryResolver:
                 return None, cleaned, None
 
             record = repository.create_observed(cleaned, normalized)
+            rec_id_str = str(record.skill_id)
             repository.add_trusted_aliases(
-                record.skill_id,
+                rec_id_str,
                 source_declared_aliases,
                 self.normalized_name,
             )
-            return record.skill_id, record.canonical_name, record.category
+            rec_category = str(record.category) if record.category else None
+            return rec_id_str, str(record.canonical_name), rec_category
         finally:
             session.close()

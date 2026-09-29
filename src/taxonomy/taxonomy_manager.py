@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from ..models.taxonomy import SkillTaxonomyItem
@@ -77,7 +78,7 @@ class TaxonomyManager:
                 path_obj = resolved
 
         if path_obj.exists():
-            with open(path_obj, "r", encoding="utf-8") as f:
+            with open(str(path_obj), "r", encoding="utf-8") as f:
                 data = json.load(f)
                 for item in data:
                     skill = SkillTaxonomyItem(**item)
@@ -277,3 +278,9 @@ class TaxonomyManager:
 
     def get_all_skills(self) -> list[SkillTaxonomyItem]:
         return list(self._by_id.values())
+
+
+@lru_cache(maxsize=4)
+def get_taxonomy_manager(seed_file_path: str | Path | None = None) -> TaxonomyManager:
+    """Returns a cached, process-wide singleton TaxonomyManager instance."""
+    return TaxonomyManager(seed_file_path=seed_file_path)

@@ -85,14 +85,14 @@ class ProjectLinkAssociator:
         """Lowercases and strips non-alphanumeric characters for slug matching."""
         if not text:
             return ""
-        return re.sub(r"[^a-z0-9]", "", str(text).lower())
+        return re.sub(r"[^a-z0-9]", "", text.lower())
 
     @classmethod
     def _extract_tokens(cls, text: str | None) -> set[str]:
         """Extracts distinctive word tokens splitting CamelCase and punctuation."""
         if not text:
             return set()
-        s = re.sub(r"([a-z])([A-Z])", r"\1 \2", str(text))
+        s = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
         words = re.findall(r"[a-z0-9]+", s.lower())
         return {w for w in words if len(w) >= 3 and w not in cls.GENERIC_STOP_WORDS}
 
@@ -165,20 +165,17 @@ class ProjectLinkAssociator:
             raw_url = proj.get("github_url") or proj.get("project_url") or proj.get("link")
 
             clean_raw = normalize_web_url(raw_url)
-            is_valid_url = clean_raw is not None
 
             # If an existing link is invalid or a non-project domain (e.g. LinkedIn), clear it
-            if is_valid_url and any(d in clean_raw.lower() for d in cls.NON_PROJECT_DOMAINS):
+            if clean_raw and any(d in clean_raw.lower() for d in cls.NON_PROJECT_DOMAINS):
                 clean_raw = None
-                is_valid_url = False
 
             # If existing link is a pure user profile (https://github.com/user), clear it
-            if is_valid_url and re.match(r"^https?://github\.com/[^/]+/?$", clean_raw, flags=re.IGNORECASE):
+            if clean_raw and re.match(r"^https?://github\.com/[^/]+/?$", clean_raw, flags=re.IGNORECASE):
                 clean_raw = None
-                is_valid_url = False
 
             # Check if clean_raw is already a valid project repository/live URL present in the document
-            if is_valid_url and clean_raw not in claimed_urls and clean_raw in candidate_urls:
+            if clean_raw and clean_raw not in claimed_urls and clean_raw in candidate_urls:
                 cls._assign_url(proj, clean_raw)
                 claimed_urls.add(clean_raw)
                 proj.pop("link", None)

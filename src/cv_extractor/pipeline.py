@@ -5,7 +5,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, overload
 
 from ..models.candidate import (
     Candidate,
@@ -178,6 +178,22 @@ class CVExtractionPipeline:
         self.extractor = extractor or llm_extractor or LLMExtractor()
         self.skill_registry = skill_registry_resolver
 
+    @overload
+    def extract_from_file(
+        self,
+        file_path: str,
+        candidate_id: str | None = None,
+        return_metadata: Literal[False] = False,
+    ) -> Candidate: ...
+
+    @overload
+    def extract_from_file(
+        self,
+        file_path: str,
+        candidate_id: str | None = None,
+        return_metadata: Literal[True] = ...,
+    ) -> tuple[Candidate, CVExtractionMetadata]: ...
+
     def extract_from_file(
         self,
         file_path: str,
@@ -212,6 +228,26 @@ class CVExtractionPipeline:
             candidate_id=candidate_id,
             return_metadata=True,
         )
+
+    @overload
+    def extract_from_text(
+        self,
+        raw_text: str,
+        file_name: str | None = None,
+        candidate_id: str | None = None,
+        document_urls: list[str] | None = None,
+        return_metadata: Literal[False] = False,
+    ) -> Candidate: ...
+
+    @overload
+    def extract_from_text(
+        self,
+        raw_text: str,
+        file_name: str | None = None,
+        candidate_id: str | None = None,
+        document_urls: list[str] | None = None,
+        return_metadata: Literal[True] = ...,
+    ) -> tuple[Candidate, CVExtractionMetadata]: ...
 
     def extract_from_text(
         self,

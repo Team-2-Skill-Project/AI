@@ -250,7 +250,7 @@ def main() -> int:
     if not output_path.is_absolute():
         output_path = BASE_DIR / output_path
 
-    with open(output_path, "w", encoding="utf-8") as f:
+    with open(str(output_path), "w", encoding="utf-8") as f:
         json.dump(candidate_dict, f, indent=2, ensure_ascii=False)
 
     print_banner("5. Test Output")

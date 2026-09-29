@@ -6,7 +6,6 @@ from fastapi.responses import StreamingResponse
 from src.schemas.mentor_schema import MentorChatRequest
 from src.ai.memory.context_builder import build_mentor_context
 from src.ai.memory.chat_history import save_turn
-from src.ai.crew.crew import run_mentor_crew_stream
 from src.ai.suggested_prompts.fallback import get_fallback_with_timeout
 from src.ai.suggested_prompts.agent_context import AgentType
 from src.middleware.auth import get_current_user
@@ -38,6 +37,8 @@ async def mentor_chat_stream(
     )
 
     async def generator():
+        from src.ai.crew.crew import run_mentor_crew_stream
+
         full_answer = ""
         active_agent_type = None
 
@@ -50,7 +51,7 @@ async def mentor_chat_stream(
                     active_agent_type = agent_type
         except Exception as e:
             err_msg = f"An error occurred while generating the response: {e}"
-            yield sse_event({"type": "token", "content": f"\n\n⚠️ {err_msg}"})
+            yield sse_event({"type": "token", "content": f"\n\n {err_msg}"})
             full_answer += f"\n\n {err_msg}"
 
         effective_agent = active_agent_type or AgentType.MENTOR

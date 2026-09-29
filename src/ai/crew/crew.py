@@ -60,7 +60,7 @@ async def run_mentor_crew_stream(user_message: str, context: dict):
     else:
         import asyncio
         result = await asyncio.to_thread(crew.kickoff)
-        output_str = str(result)
+        output_str = getattr(result, "raw", result)
         chunk_size = 20
         for i in range(0, len(output_str), chunk_size):
             yield output_str[i : i + chunk_size], intent

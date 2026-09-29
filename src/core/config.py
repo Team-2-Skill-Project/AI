@@ -10,7 +10,7 @@ import os
 import warnings
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, overload
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -191,6 +191,10 @@ class Settings(BaseModel):
         """Build unified settings from environment variables."""
         llm_cfg = LLMSettings.load_from_env()
 
+        @overload
+        def env(name: str, default: str) -> str: ...
+        @overload
+        def env(name: str, default: None = None) -> str | None: ...
         def env(name: str, default: str | None = None) -> str | None:
             value = os.getenv(name)
             return value if value is not None else default
@@ -224,9 +228,9 @@ class Settings(BaseModel):
 
         database_url = env("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'skillmatch.db'}"
 
-        host = env("API_HOST", "127.0.0.1") or "127.0.0.1"
+        host = env("API_HOST", "127.0.0.1")
         port = env_int("API_PORT", 8001)
-        environment = env("ENVIRONMENT", "development") or "development"
+        environment = env("ENVIRONMENT", "development")
         api_key = env("SERVICE_API_KEY") or env("API_KEY") or None
         enable_api_key_auth = env_bool("ENABLE_API_KEY_AUTH", False)
         rate_limit_enabled = env_bool("ENABLE_RATE_LIMITING", env_bool("RATE_LIMIT_ENABLED", True))
@@ -248,9 +252,9 @@ class Settings(BaseModel):
             llm=llm_cfg,
             DATABASE_URL=database_url,
             JOOBLE_API_KEY=(env("JOOBLE_API_KEY") or None),
-            JOOBLE_API_BASE_URL=env("JOOBLE_API_BASE_URL", "https://eg.jooble.org/api") or "https://eg.jooble.org/api",
+            JOOBLE_API_BASE_URL=env("JOOBLE_API_BASE_URL", "https://eg.jooble.org/api"),
             JOOBLE_TIMEOUT=env_float("JOOBLE_TIMEOUT", 20.0),
-            REDIS_URL=env("REDIS_URL", "redis://localhost:6379/0") or "redis://localhost:6379/0",
+            REDIS_URL=env("REDIS_URL", "redis://localhost:6379/0"),
             REDIS_MAX_CONNECTIONS=env_int("REDIS_MAX_CONNECTIONS", 20),
             REDIS_SOCKET_TIMEOUT=env_float("REDIS_SOCKET_TIMEOUT", 2.0),
             REDIS_CONNECT_TIMEOUT=env_float("REDIS_CONNECT_TIMEOUT", 2.0),
@@ -259,7 +263,7 @@ class Settings(BaseModel):
             RATE_LIMIT_ENABLED=rate_limit_enabled,
             RATE_LIMIT_REQUESTS=rate_limit_requests,
             RATE_LIMIT_WINDOW_SECONDS=env_int("RATE_LIMIT_WINDOW_SECONDS", 60),
-            LOG_LEVEL=env("LOG_LEVEL", "INFO") or "INFO",
+            LOG_LEVEL=env("LOG_LEVEL", "INFO"),
             TAXONOMY_PATH=resolve_taxonomy_path(env("TAXONOMY_PATH")) if env("TAXONOMY_PATH") else resolve_taxonomy_path(),
             taxonomy_path=resolve_taxonomy_path(env("TAXONOMY_PATH")) if env("TAXONOMY_PATH") else resolve_taxonomy_path(),
             api_key=api_key,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, func
 from src.db.base import Base
 
@@ -11,8 +11,8 @@ class MentorConversation(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, nullable=False, index=True)
     active_agent = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
-    updated_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         return {
