@@ -161,6 +161,16 @@ class DatabaseJobRepository(JobRepository):
         record = self.db.get(JobRequirementModel, job_id)
         return self._to_job_posting(record) if record is not None else None
 
+    def get_structured_profile_by_id(self, job_id: str) -> JobRequirementProfile | None:
+        """Return the stored extraction profile without re-running extraction."""
+        record = self.db.get(JobRequirementModel, job_id)
+        if record is None or not isinstance(record.structured_profile, dict):
+            return None
+        try:
+            return JobRequirementProfile.model_validate(record.structured_profile)
+        except Exception:
+            return None
+
     def _find_existing(self, job: JobPosting) -> JobRequirementModel | None:
         conditions = []
         if job.source and job.source_external_id:

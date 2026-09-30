@@ -86,4 +86,40 @@ class MockCandidateRepository(CandidateRepository):
         return candidate
 
 
-candidate_repository = MockCandidateRepository()
+class _LazyCandidateRepository(CandidateRepository):
+    """Runtime proxy that delegates to DatabaseCandidateRepository without circular import."""
+
+    def __init__(self) -> None:
+        self._delegate: Optional[CandidateRepository] = None
+
+    def _get_delegate(self) -> CandidateRepository:
+        if self._delegate is None:
+            from src.db.repositories.candidate_repository import DatabaseCandidateRepository
+            self._delegate = DatabaseCandidateRepository()
+        return self._delegate
+
+    def get_candidate(self, candidate_id: str) -> Optional[Candidate]:
+        return self._get_delegate().get_candidate(candidate_id)
+
+    def save_candidate(self, candidate: Candidate) -> Candidate:
+        return self._get_delegate().save_candidate(candidate)
+
+
+# Production runtime candidate repository backed by database persistence
+candidate_repository: CandidateRepository = _LazyCandidateRepository()
+
+
+def __getattr__(name: str):
+    if name == "DatabaseCandidateRepository":
+        from src.db.repositories.candidate_repository import DatabaseCandidateRepository
+        return DatabaseCandidateRepository
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+__all__ = [
+    "CandidateRepository",
+    "DatabaseCandidateRepository",
+    "MockCandidateRepository",
+    "candidate_repository",
+    "_seed_candidates",
+]

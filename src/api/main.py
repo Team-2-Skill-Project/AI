@@ -110,14 +110,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         422: "UNPROCESSABLE_ENTITY",
         429: "RATE_LIMIT_EXCEEDED",
     }
-    error_code = code_map.get(exc.status_code, "HTTP_ERROR")
+    detail = exc.detail
+    detail_error_code = detail.get("error_code") if isinstance(detail, dict) else None
+    detail_message = detail.get("detail", detail) if isinstance(detail, dict) else detail
+    error_code = detail_error_code or code_map.get(exc.status_code, "HTTP_ERROR")
 
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": error_code,
             "error_code": error_code,
-            "detail": exc.detail,
+            "detail": detail_message,
         },
         headers=exc.headers,
     )
@@ -177,6 +180,10 @@ async def health_check():
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
+        "active_model": settings.parse_provider_and_model()[1],
+        "features": {
+            "job_description_understanding": "active",
+        },
         "redis_connected": redis_avail,
         "redis": {
             "status": "connected" if redis_avail else "unavailable",

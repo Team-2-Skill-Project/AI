@@ -8,6 +8,7 @@ from src.ai.memory.context_builder import build_mentor_context
 from src.ai.memory.chat_history import save_turn
 from src.ai.suggested_prompts.fallback import get_fallback_with_timeout
 from src.ai.suggested_prompts.agent_context import AgentType
+from src.ai.crew.crew import run_mentor_crew_stream
 from src.middleware.auth import get_current_user
 
 router = APIRouter(tags=["AI Mentor"])
@@ -37,8 +38,6 @@ async def mentor_chat_stream(
     )
 
     async def generator():
-        from src.ai.crew.crew import run_mentor_crew_stream
-
         full_answer = ""
         active_agent_type = None
 

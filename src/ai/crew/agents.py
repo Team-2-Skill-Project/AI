@@ -1,16 +1,73 @@
 from __future__ import annotations
-from crewai import Agent
-from src.core.llm import get_llm
+
+from typing import Any
+
+try:
+    from crewai import LLM, Agent
+except ImportError:  # pragma: no cover - supports older CrewAI releases
+    from crewai import Agent
+
+    LLM = None  # type: ignore[assignment,misc]
 
 from src.ai.crew.tools.cv_tool import get_cv_profile_tool
+from src.ai.crew.tools.interview_tool import get_interview_prep_tool
 from src.ai.crew.tools.matching_tool import get_job_match_tool
 from src.ai.crew.tools.recommendation_tool import (
-    get_job_recommendations_tool,
     explain_recommendation_tool,
+    get_job_recommendations_tool,
 )
-from src.ai.crew.tools.interview_tool import get_interview_prep_tool
 from src.ai.crew.tools.roadmap_tool import get_roadmap_tool
 from src.ai.crew.tools.strategy_tool import get_application_strategy_tool
+from src.core.config import LLMSettings, settings
+from src.core.llm import get_llm
+
+
+def _adapt_tools(tools: list[Any]) -> list[Any]:
+    """Normalize LangChain tools for CrewAI versions that require BaseTool."""
+    try:
+        from crewai.tools.base_tool import Tool as CrewAITool
+    except ImportError:  # pragma: no cover - supports older CrewAI releases
+        return tools
+
+    converter = getattr(CrewAITool, "from_langchain", None)
+    if not callable(converter):
+        return tools
+
+    adapted: list[Any] = []
+    for tool in tools:
+        try:
+            adapted.append(converter(tool))
+        except (AttributeError, TypeError, ValueError):
+            # Some older releases already accept LangChain tools directly.
+            adapted.append(tool)
+    return adapted
+
+
+def _get_agent_llm() -> Any:
+    """Build the CrewAI-facing LLM from the canonical application settings."""
+    if LLM is None:  # pragma: no cover - supports older CrewAI releases
+        return get_llm()
+
+    llm_settings = settings.get_llm_settings()
+    provider, model = settings.parse_provider_and_model()
+    provider = LLMSettings.validate_provider(provider)
+    if provider in {"gemini", "google", "openai", "groq"} and not llm_settings.api_key:
+        raise ValueError(f"LLM_API_KEY is required for provider '{provider}'")
+
+    # LiteLLM, used by CrewAI, selects the integration from the model prefix.
+    crew_provider = "gemini" if provider == "google" else provider
+    model_ref = model if "/" in model else f"{crew_provider}/{model}"
+    kwargs: dict[str, Any] = {
+        "model": model_ref,
+        "temperature": llm_settings.temperature,
+        "max_tokens": llm_settings.max_tokens,
+        "timeout": llm_settings.timeout,
+    }
+    if llm_settings.api_key:
+        kwargs["api_key"] = llm_settings.api_key
+    if llm_settings.base_url:
+        kwargs["base_url"] = llm_settings.base_url
+    return LLM(**kwargs)
 
 
 mentor_agent = Agent(
@@ -36,7 +93,7 @@ mentor_agent = Agent(
         "6. Interview Readiness: Pinpoint exact topics and exercises needed before interviews based on role requirements and skill gaps.\n"
         "7. Truthfulness & Boundaries: Never fabricate skills, never guarantee job placement, and ask for missing evidence when critical."
     ),
-    tools=[
+    tools=_adapt_tools([
         get_cv_profile_tool,
         get_job_match_tool,
         get_job_recommendations_tool,
@@ -44,8 +101,8 @@ mentor_agent = Agent(
         get_interview_prep_tool,
         get_roadmap_tool,
         get_application_strategy_tool,
-    ],
-    llm=get_llm(),
+    ]),
+    llm=_get_agent_llm(),
     memory=True,
     verbose=True,
     allow_delegation=False,
@@ -65,8 +122,8 @@ roadmap_agent = Agent(
         "- Roadmap Adjustment: Reprioritizing stages whenever the candidate adds skills, finishes projects, or target roles change.\n"
         "- Maintaining strict truthfulness and realistic expectations without assuming unverified capabilities."
     ),
-    tools=[get_cv_profile_tool, get_roadmap_tool],
-    llm=get_llm(),
+    tools=_adapt_tools([get_cv_profile_tool, get_roadmap_tool]),
+    llm=_get_agent_llm(),
     memory=True,
     verbose=True,
     allow_delegation=False,
@@ -86,8 +143,13 @@ job_insights_agent = Agent(
         "- Application Debrief: Provide constructive next steps following an interview or rejection without inventing hidden employer motives.\n"
         "- Truthfulness & Boundaries: Never guarantee hiring outcomes or fabricate credentials."
     ),
-    tools=[get_job_match_tool, explain_recommendation_tool, get_interview_prep_tool, get_application_strategy_tool],
-    llm=get_llm(),
+    tools=_adapt_tools([
+        get_job_match_tool,
+        explain_recommendation_tool,
+        get_interview_prep_tool,
+        get_application_strategy_tool,
+    ]),
+    llm=_get_agent_llm(),
     memory=True,
     verbose=True,
     allow_delegation=False,

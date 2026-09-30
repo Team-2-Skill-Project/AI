@@ -95,7 +95,7 @@ def _run_cv_background_extraction(
     status_code=status.HTTP_200_OK,
     summary="Extract Structured Profile from CV File (Direct)",
     description=(
-        "Upload a digital CV/Resume file (PDF, DOCX, or TXT). "
+        "Upload a digital CV/Resume file (PDF, DOCX, TXT, or Markdown). "
         "Processes the file without blocking the FastAPI event loop via background thread pool."
     ),
     responses={
@@ -109,7 +109,7 @@ def _run_cv_background_extraction(
 )
 async def extract_cv_file(
     response: Response,
-    file: UploadFile = File(..., description="CV file to upload (PDF, DOCX, or TXT)"),
+    file: UploadFile = File(..., description="CV file to upload (PDF, DOCX, TXT, or Markdown)"),
     candidate_id: str | None = Form(None, description="Optional custom candidate ID (e.g. cand_001)"),
     pipeline: CVExtractionPipeline = Depends(get_cv_pipeline),
 ):
@@ -228,7 +228,7 @@ async def extract_cv_file(
 )
 async def extract_cv_file_async(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(..., description="CV file to upload (PDF, DOCX, or TXT)"),
+    file: UploadFile = File(..., description="CV file to upload (PDF, DOCX, TXT, or Markdown)"),
     candidate_id: str | None = Form(None, description="Optional custom candidate ID (e.g. cand_001)"),
     pipeline: CVExtractionPipeline = Depends(get_cv_pipeline),
 ):

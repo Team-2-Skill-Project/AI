@@ -34,6 +34,14 @@ def override_get_db():
 fastapi_app.dependency_overrides[get_db] = override_get_db
 client = TestClient(fastapi_app)
 
+
+@pytest.fixture(autouse=True)
+def restore_review_queue_db_override():
+    """Keep this module's isolated database override across test modules."""
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    yield
+
+
 def test_should_flag_match_criteria():
     # Borderline score & Partially Qualified
     match_partially = SkillGapAnalysisResponse(

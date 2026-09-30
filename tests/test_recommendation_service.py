@@ -11,8 +11,9 @@ from src.models.candidate import (
     CandidateSkill,
     EvidenceItem,
 )
+from src.repositories.behavior_repository import MockBehaviorRepository
+from src.repositories.mock_job_repository import MockJobRepository
 from src.services.recommendation_service import RecommendationService
-from src.db.repositories.mock_job_repository import MockJobRepository
 
 
 @pytest.fixture
@@ -77,7 +78,10 @@ async def test_end_to_end_ranking_python_senior(python_senior_candidate):
       - Match score >= 90.0.
       - Applied (job_028), dismissed (job_029), expired (job_022), inactive (job_024) are absent.
     """
-    service = RecommendationService(job_repository=MockJobRepository())
+    service = RecommendationService(
+        job_repository=MockJobRepository(),
+        behavior_repository=MockBehaviorRepository(),
+    )
     feed = await service.get_recommendation_feed(python_senior_candidate, page=1, limit=20)
 
     assert len(feed.recommendations) > 0
@@ -102,7 +106,10 @@ async def test_end_to_end_ranking_python_senior(python_senior_candidate):
 @pytest.mark.asyncio
 async def test_recommendation_pagination(python_senior_candidate):
     """Verify limit and page offsets deliver deterministic, non-overlapping subsets."""
-    service = RecommendationService(job_repository=MockJobRepository())
+    service = RecommendationService(
+        job_repository=MockJobRepository(),
+        behavior_repository=MockBehaviorRepository(),
+    )
 
     page1 = await service.get_recommendation_feed(python_senior_candidate, page=1, limit=3)
     assert len(page1.recommendations) == 3
@@ -122,10 +129,13 @@ async def test_recommendation_pagination(python_senior_candidate):
     assert set(page1_ids).isdisjoint(set(page2_ids))
 
 
-def test_recommendation_api_endpoint():
+def test_recommendation_api_endpoint(python_senior_candidate):
     """Verify GET /api/v1/recommendations/feed works via FastAPI TestClient."""
+    from src.repositories.candidate_repository import candidate_repository
+    candidate_repository.save_candidate(python_senior_candidate)
+
     client = TestClient(app)
-    response = client.get("/api/v1/recommendations/feed?candidate_id=cand_001&limit=5")
+    response = client.get(f"/api/v1/recommendations/feed?candidate_id={python_senior_candidate.candidate_id}&limit=5")
     assert response.status_code == 200
 
     data = response.json()

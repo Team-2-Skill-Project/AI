@@ -7,6 +7,8 @@ from src.db.models.match import MatchRecordModel
 from src.db.models.review_queue import ReviewQueueModel
 from src.db.models.roadmap import RoadmapModel
 from src.db.models.skill_resource import SkillResourceModel
+from src.db.models.candidate import CandidateModel
+from src.db.models.interaction import CandidateInteractionModel
 from src.models.mentor_conversation import MentorConversation
 from src.models.mentor_message import MentorMessage
 
@@ -18,7 +20,8 @@ __all__ = [
     "ReviewQueueModel",
     "RoadmapModel",
     "SkillResourceModel",
+    "CandidateModel",
+    "CandidateInteractionModel",
     "MentorConversation",
     "MentorMessage",
 ]
-

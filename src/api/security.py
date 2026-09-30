@@ -100,6 +100,43 @@ async def verify_api_key(
     return provided_key
 
 
+async def require_service_api_key(
+    request: Request,
+    api_key_header_val: str | None = Security(api_key_header),
+) -> str:
+    """Require the already-configured service key for internal write operations.
+
+    This service has no authenticated candidate principal yet.  Routes using
+    this dependency are therefore server-to-server integration points: the
+    caller (for example, Laravel) must authenticate and authorize the
+    candidate before forwarding the event.  Unlike ``verify_api_key``, this is
+    never disabled by the public-read API-key feature flag.
+    """
+    app_settings = get_app_settings()
+    configured_key = app_settings.api_key
+    if not configured_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "detail": "Interaction event ingestion is unavailable until SERVICE_API_KEY is configured.",
+                "error_code": "SERVICE_AUTH_NOT_CONFIGURED",
+            },
+        )
+
+    provided_key = api_key_header_val
+    if not provided_key:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            provided_key = auth_header[7:].strip()
+
+    if not provided_key or provided_key != configured_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"detail": "Invalid or missing service API key.", "error_code": "UNAUTHORIZED"},
+        )
+    return provided_key
+
+
 async def check_rate_limit(request: Request) -> None:
     """
     Dependency that enforces rate limits on incoming API calls.
