@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable, Literal, Protocol, cast
+from typing import Callable, Literal, Protocol
 
 from src.job_extractor.models import JobRequirementProfile, NormalizedSkill
 from src.models.candidate import Candidate, CandidateSkill, ExperienceItem
@@ -274,7 +274,7 @@ class CVJobGapAnalyzer:
             canonical_name=item.identity.canonical_name,
             category=item.identity.category,
             evidence=item.evidence,
-            strength=cast(EvidenceStrength, self._evidence_strength(item.evidence)),
+            strength=self._evidence_strength(item.evidence),
         )
 
     def _skill_gaps(
@@ -301,10 +301,7 @@ class CVJobGapAnalyzer:
                     requirement_type=requirement_type,  # type: ignore[arg-type]
                     matched=candidate_item is not None,
                     candidate_proficiency=candidate_item.proficiency if candidate_item else None,
-                    evidence_strength=cast(
-                        EvidenceStrength,
-                        self._evidence_strength(candidate_item.evidence) if candidate_item else "unknown",
-                    ),
+                    evidence_strength=self._evidence_strength(candidate_item.evidence) if candidate_item else "unknown",
                     evidence=candidate_item.evidence if candidate_item else [],
                 )
             )
