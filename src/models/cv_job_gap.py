@@ -21,6 +21,9 @@ class EvidenceReference(BaseModel):
     text: str
 
 
+EvidenceStrength = Literal["unknown", "listed", "contextual", "corroborated", "measured_context"]
+
+
 class SkillEvidence(BaseModel):
     """All known factual evidence for one candidate skill identity."""
 
@@ -28,7 +31,7 @@ class SkillEvidence(BaseModel):
     canonical_name: str
     category: str | None = None
     evidence: list[EvidenceReference] = Field(default_factory=list)
-    strength: Literal["unknown", "listed", "contextual", "corroborated", "measured_context"] = "unknown"
+    strength: EvidenceStrength = "unknown"
 
 
 class SkillGapItem(BaseModel):
@@ -41,7 +44,7 @@ class SkillGapItem(BaseModel):
     requirement_type: Literal["required", "preferred"]
     matched: bool
     candidate_proficiency: str | None = None
-    evidence_strength: Literal["unknown", "listed", "contextual", "corroborated", "measured_context"] = "unknown"
+    evidence_strength: EvidenceStrength = "unknown"
     evidence: list[EvidenceReference] = Field(default_factory=list)
 
 

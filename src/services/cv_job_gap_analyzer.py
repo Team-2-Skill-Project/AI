@@ -10,13 +10,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol, cast
 
 from src.job_extractor.models import JobRequirementProfile, NormalizedSkill
 from src.models.candidate import Candidate, CandidateSkill, ExperienceItem
 from src.models.cv_job_gap import (
     CVJobGapResult,
     EvidenceReference,
+    EvidenceStrength,
     ExperienceAlignment,
     ResponsibilityAlignment,
     RoleAlignment,
@@ -110,7 +111,7 @@ class CVJobGapAnalyzer:
 
     def _identity(self, name: str | None, skill_id: str | None, category: str | None = None) -> _SkillIdentity | None:
         clean_name = (name or "").strip()
-        clean_id = str(skill_id).strip() if skill_id is not None and str(skill_id).strip() else None
+        clean_id = skill_id.strip() if skill_id is not None and skill_id.strip() else None
         if clean_id:
             return _SkillIdentity(f"id:{clean_id.casefold()}", clean_id, clean_name or clean_id, category)
         if not clean_name:
@@ -252,7 +253,9 @@ class CVJobGapAnalyzer:
         return evidence_map
 
     @staticmethod
-    def _evidence_strength(evidence: list[EvidenceReference]) -> str:
+    def _evidence_strength(
+        evidence: list[EvidenceReference],
+    ) -> EvidenceStrength:
         if not evidence:
             return "unknown"
         contextual = [item for item in evidence if item.source_type in {"experience", "project"}]
@@ -271,7 +274,7 @@ class CVJobGapAnalyzer:
             canonical_name=item.identity.canonical_name,
             category=item.identity.category,
             evidence=item.evidence,
-            strength=self._evidence_strength(item.evidence),
+            strength=cast(EvidenceStrength, self._evidence_strength(item.evidence)),
         )
 
     def _skill_gaps(
@@ -298,7 +301,10 @@ class CVJobGapAnalyzer:
                     requirement_type=requirement_type,  # type: ignore[arg-type]
                     matched=candidate_item is not None,
                     candidate_proficiency=candidate_item.proficiency if candidate_item else None,
-                    evidence_strength=self._evidence_strength(candidate_item.evidence) if candidate_item else "unknown",
+                    evidence_strength=cast(
+                        EvidenceStrength,
+                        self._evidence_strength(candidate_item.evidence) if candidate_item else "unknown",
+                    ),
                     evidence=candidate_item.evidence if candidate_item else [],
                 )
             )
