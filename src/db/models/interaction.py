@@ -6,7 +6,7 @@ Tracks behavioral events (view, click, save, apply, dismiss) linking
 real candidates and jobs with timestamps and optional interaction metadata.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Integer, String, Index
 from sqlalchemy.dialects.sqlite import JSON
 
@@ -27,5 +27,5 @@ class CandidateInteractionModel(Base):
     candidate_id = Column(String(100), nullable=False, index=True)
     job_id = Column(String(100), nullable=False, index=True)
     event_type = Column(String(50), nullable=False, index=True)  # view, click, save, apply, dismiss
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     metadata_json = Column(JSON, nullable=True)

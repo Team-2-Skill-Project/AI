@@ -99,7 +99,8 @@ class DeterministicValidationGuard:
     @staticmethod
     def _unwrap(annotation: Any) -> Any:
         origin = get_origin(annotation)
-        if origin in (Union, types.UnionType):
+        union_types = (Union, types.UnionType) if hasattr(types, "UnionType") else (Union,)
+        if origin in union_types:
             non_null = [item for item in get_args(annotation) if item is not type(None)]
             return non_null[0] if len(non_null) == 1 else annotation
         return annotation
@@ -154,7 +155,8 @@ class DeterministicValidationGuard:
     @staticmethod
     def _is_nullable(annotation: Any, field: Any) -> bool:
         origin = get_origin(annotation)
-        if origin in (Union, types.UnionType) and type(None) in get_args(annotation):
+        union_types = (Union, types.UnionType) if hasattr(types, "UnionType") else (Union,)
+        if origin in union_types and type(None) in get_args(annotation):
             return True
         return getattr(field, "default", None) is None
 

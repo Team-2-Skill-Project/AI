@@ -1,8 +1,8 @@
 from __future__ import annotations
 import json
 import uuid
-from datetime import datetime
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Optional, cast
 from sqlalchemy import Column, String, Text, DateTime
 from src.db.base import Base
 
@@ -19,8 +19,8 @@ class ReviewQueueModel(Base):
     reviewer_id = Column(String(100), nullable=True)
     reviewer_notes = Column(Text, nullable=True)
     resolution_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     reviewed_at = Column(DateTime, nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -30,11 +30,11 @@ class ReviewQueueModel(Base):
             "target_id": self.target_id,
             "status": self.status,
             "priority": self.priority,
-            "flagged_reasons": json.loads(self.flagged_reasons_json) if self.flagged_reasons_json else [],
-            "payload": json.loads(self.payload_json) if self.payload_json else {},
+            "flagged_reasons": json.loads(cast(str, self.flagged_reasons_json)) if self.flagged_reasons_json else [],
+            "payload": json.loads(cast(str, self.payload_json)) if self.payload_json else {},
             "reviewer_id": self.reviewer_id,
             "reviewer_notes": self.reviewer_notes,
-            "resolution": json.loads(self.resolution_json) if self.resolution_json else None,
+            "resolution": json.loads(cast(str, self.resolution_json)) if self.resolution_json else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,

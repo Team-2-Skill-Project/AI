@@ -201,5 +201,5 @@ class DocumentLoader:
 
     def _extract_plain_text(self, path: Path) -> tuple[str, list[str]]:
         """Reads plain text files with UTF-8 encoding."""
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(str(path), "r", encoding="utf-8", errors="replace") as f:
             return f.read(), []
