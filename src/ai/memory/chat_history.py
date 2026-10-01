@@ -25,7 +25,20 @@ async def save_turn(conversation_id: str, user_message: str, assistant_message: 
     Saves a user message and assistant message turn into the database with explicit sequence timestamps.
     """
     async with get_session() as session:
+        last_msg = (
+            session.query(MentorMessage)
+            .filter(MentorMessage.conversation_id == conversation_id)
+            .order_by(MentorMessage.created_at.desc())
+            .first()
+        )
         now = datetime.datetime.now(datetime.timezone.utc)
+        if last_msg and last_msg.created_at:
+            last_time = last_msg.created_at
+            if last_time.tzinfo is None:
+                last_time = last_time.replace(tzinfo=datetime.timezone.utc)
+            if now <= last_time:
+                now = last_time + datetime.timedelta(seconds=1)
+
         user_msg = MentorMessage(
             conversation_id=conversation_id,
             role="user",
@@ -39,7 +52,7 @@ async def save_turn(conversation_id: str, user_message: str, assistant_message: 
             conversation_id=conversation_id,
             role="assistant",
             content=assistant_message,
-            created_at=now + datetime.timedelta(microseconds=1000),
+            created_at=now + datetime.timedelta(seconds=1),
         )
         session.add(assistant_msg)
         session.commit()
