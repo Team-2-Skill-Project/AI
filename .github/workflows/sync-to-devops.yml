@@ -1,0 +1,50 @@
+name: Sync to DevOps Monorepo
+
+on: 
+  push: 
+    branches: [main]
+
+jobs: 
+  sync: 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AI 
+        uses: actions/checkout@v4
+        with: 
+          path: source 
+
+      - name: Checkout DevOps-Infrastructure
+        uses: actions/checkout@v4 
+        with: 
+          repository: Team-2-Skill-Project/DevOps-Infrastructure 
+          token: ${{ secrets.DEVOPS_SYNC_TOKEN }}
+          path: devops
+
+      - name: Sync AI Files 
+        run: |
+          mkdir -p devops/AI 
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='Dockerfile*' \
+            --exclude='.dockerignore' \
+            source/ devops/AI/
+          if [ -f source/Dockerfile ]; then
+            cp -a source/Dockerfile devops/AI/
+          fi
+          if [ -f source/.dockerignore ]; then
+            cp -a source/.dockerignore devops/AI/
+          fi
+
+      - name: Commit & Push to Devops 
+        run: |
+          cd devops
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com" 
+          git add AI/ 
+          if git diff --staged --quiet; then 
+            echo "No changes to sync."
+          else 
+            git commit -m "sync(AI): update from commit ${{ github.sha }}"
+            git push origin main
+          fi
