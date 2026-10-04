@@ -23,7 +23,18 @@ jobs:
       - name: Sync AI Files 
         run: |
           mkdir -p devops/AI 
-          rsync -av --delete --exclude='.git' --exclude='.github' source/ devops/AI/
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='Dockerfile*' \
+            --exclude='.dockerignore' \
+            source/ devops/AI/
+          if [ -f source/Dockerfile ]; then
+            cp -a source/Dockerfile devops/AI/
+          fi
+          if [ -f source/.dockerignore ]; then
+            cp -a source/.dockerignore devops/AI/
+          fi
 
       - name: Commit & Push to Devops 
         run: |
@@ -32,9 +43,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com" 
           git add AI/ 
           if git diff --staged --quiet; then 
-            echo "No changes tp sync."
+            echo "No changes to sync."
           else 
             git commit -m "sync(AI): update from commit ${{ github.sha }}"
             git push origin main
-            fi 
-            
+          fi
