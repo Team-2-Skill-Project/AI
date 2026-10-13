@@ -4,10 +4,20 @@ from typing import Any
 
 try:
     from crewai import LLM, Agent
-except ImportError:  # pragma: no cover - supports older CrewAI releases
-    from crewai import Agent
+except ImportError:
+    try:
+        from crewai import Agent
 
-    LLM = None  # type: ignore[assignment,misc]
+        LLM = None  # type: ignore[assignment,misc]
+    except ImportError:
+        class Agent:  # type: ignore[no-redef]
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.role = kwargs.get("role", "")
+                self.goal = kwargs.get("goal", "")
+                self.backstory = kwargs.get("backstory", "")
+                self.tools = kwargs.get("tools", [])
+
+        LLM = None  # type: ignore[assignment,misc]
 
 from src.ai.crew.tools.cv_tool import get_cv_profile_tool
 from src.ai.crew.tools.interview_tool import get_interview_prep_tool

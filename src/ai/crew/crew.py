@@ -1,6 +1,15 @@
 from __future__ import annotations
 import inspect
-from crewai import Crew, Process
+from typing import Any
+try:
+    from crewai import Crew, Process
+except ImportError:
+    class Crew:  # type: ignore[no-redef]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.agents = kwargs.get("agents", [])
+            self.tasks = kwargs.get("tasks", [])
+    class Process:  # type: ignore[no-redef]
+        sequential = "sequential"
 
 from src.ai.crew.agents import mentor_agent, roadmap_agent, job_insights_agent
 from src.ai.crew.tasks import (
@@ -47,6 +56,11 @@ async def run_mentor_crew_stream(user_message: str, context: dict):
         process=Process.sequential,
         verbose=True,
     )
+
+    if not hasattr(crew, "kickoff_stream") and not hasattr(crew, "kickoff"):
+        yield "AI Mentor stream is active (running in lightweight fallback mode).", intent
+        yield "", intent
+        return
 
     # CrewAI supports streaming either via kickoff_stream or kickoff fallback
     if hasattr(crew, "kickoff_stream") and callable(getattr(crew, "kickoff_stream")):

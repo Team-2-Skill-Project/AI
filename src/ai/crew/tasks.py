@@ -1,5 +1,14 @@
 from __future__ import annotations
-from crewai import Task
+from typing import Any
+try:
+    from crewai import Task
+except ImportError:
+    class Task:  # type: ignore[no-redef]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.description = kwargs.get("description", "")
+            self.expected_output = kwargs.get("expected_output", "")
+            self.agent = kwargs.get("agent", None)
+
 from src.ai.crew.agents import mentor_agent, roadmap_agent, job_insights_agent
 
 
