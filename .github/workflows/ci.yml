@@ -15,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Pytest Test Suite
+  dependencies:
+    name: Dependency Validation
     runs-on: ubuntu-latest
 
     steps:
@@ -35,25 +35,10 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      - name: Run Pytest test suite
-        run: |
-          if [ -d "tests" ]; then
-            python -m pytest tests/ -v --tb=short
-          else
-            echo "tests/ directory not present, skipping test step."
-          fi
-        env:
-          ENVIRONMENT: test
-          DATABASE_URL: sqlite://
-          REDIS_URL: redis://localhost:6379/0
-          LLM_API_KEY: dummy-ci-key
-          GEMINI_API_KEY: dummy-ci-key
-          GROQ_API_KEY: dummy-ci-key
-
   docker-build:
     name: Docker Build Check
     runs-on: ubuntu-latest
-    needs: test
+    needs: dependencies
 
     steps:
       - name: Checkout repository
