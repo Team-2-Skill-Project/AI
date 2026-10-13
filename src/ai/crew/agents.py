@@ -55,29 +55,32 @@ def _adapt_tools(tools: list[Any]) -> list[Any]:
 
 def _get_agent_llm() -> Any:
     """Build the CrewAI-facing LLM from the canonical application settings."""
-    if LLM is None:  # pragma: no cover - supports older CrewAI releases
-        return get_llm()
+    try:
+        if LLM is None:  # pragma: no cover - supports older CrewAI releases
+            return get_llm()
 
-    llm_settings = settings.get_llm_settings()
-    provider, model = settings.parse_provider_and_model()
-    provider = LLMSettings.validate_provider(provider)
-    if provider in {"gemini", "google", "openai", "groq"} and not llm_settings.api_key:
-        raise ValueError(f"LLM_API_KEY is required for provider '{provider}'")
+        llm_settings = settings.get_llm_settings()
+        provider, model = settings.parse_provider_and_model()
+        provider = LLMSettings.validate_provider(provider)
+        if provider in {"gemini", "google", "openai", "groq"} and not llm_settings.api_key:
+            return None
 
-    # LiteLLM, used by CrewAI, selects the integration from the model prefix.
-    crew_provider = "gemini" if provider == "google" else provider
-    model_ref = model if "/" in model else f"{crew_provider}/{model}"
-    kwargs: dict[str, Any] = {
-        "model": model_ref,
-        "temperature": llm_settings.temperature,
-        "max_tokens": llm_settings.max_tokens,
-        "timeout": llm_settings.timeout,
-    }
-    if llm_settings.api_key:
-        kwargs["api_key"] = llm_settings.api_key
-    if llm_settings.base_url:
-        kwargs["base_url"] = llm_settings.base_url
-    return LLM(**kwargs)
+        # LiteLLM, used by CrewAI, selects the integration from the model prefix.
+        crew_provider = "gemini" if provider == "google" else provider
+        model_ref = model if "/" in model else f"{crew_provider}/{model}"
+        kwargs: dict[str, Any] = {
+            "model": model_ref,
+            "temperature": llm_settings.temperature,
+            "max_tokens": llm_settings.max_tokens,
+            "timeout": llm_settings.timeout,
+        }
+        if llm_settings.api_key:
+            kwargs["api_key"] = llm_settings.api_key
+        if llm_settings.base_url:
+            kwargs["base_url"] = llm_settings.base_url
+        return LLM(**kwargs)
+    except Exception:
+        return None
 
 
 mentor_agent = Agent(
