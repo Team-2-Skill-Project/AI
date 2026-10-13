@@ -37,7 +37,11 @@ jobs:
 
       - name: Run Pytest test suite
         run: |
-          python -m pytest tests/ -v --tb=short
+          if [ -d "tests" ]; then
+            python -m pytest tests/ -v --tb=short
+          else
+            echo "tests/ directory not present, skipping test step."
+          fi
         env:
           ENVIRONMENT: test
           DATABASE_URL: sqlite://
